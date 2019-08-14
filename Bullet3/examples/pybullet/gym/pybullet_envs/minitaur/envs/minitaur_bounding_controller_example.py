@@ -102,28 +102,28 @@ for _ in range(1):
         front_left_leg_exten_desire = []
 
 def MapToMinusPiToPi(angles):
-  """Maps a list of angles to [-pi, pi].
+    """Maps a list of angles to [-pi, pi].
 
-  Args:
-    angles: A list of angles in rad.
-  Returns:
-    A list of angle mapped to [-pi, pi].
-  """
-  mapped_angles = copy.deepcopy(angles)
-  for i in range(len(angles)):
-    mapped_angles[i] = math.fmod(angles[i], TWO_PI)
-    if mapped_angles[i] >= math.pi:
-      mapped_angles[i] -= TWO_PI
-    elif mapped_angles[i] < -math.pi:
-      mapped_angles[i] += TWO_PI
-  return mapped_angles
+    Args:
+        angles: A list of angles in rad.
+    Returns:
+        A list of angle mapped to [-pi, pi].
+    """
+    mapped_angles = copy.deepcopy(angles)
+    for i in range(len(angles)):
+        mapped_angles[i] = math.fmod(angles[i], TWO_PI)
+        if mapped_angles[i] >= math.pi:
+            mapped_angles[i] -= TWO_PI
+        elif mapped_angles[i] < -math.pi:
+            mapped_angles[i] += TWO_PI
+    return mapped_angles
 
 def convert_to_list(obj):
-  try:
-    iter(obj)
-    return obj
-  except TypeError:
-    return [obj]
+    try:
+        iter(obj)
+        return obj
+    except TypeError:
+        return [obj]
 
 def velocity(iter):
     return base_velocity_x_desire[iter]
@@ -1721,10 +1721,8 @@ def main(argv):
             t = env.minitaur.GetTimeSinceReset() - tstart
             controller.behavior_parameters = minitaur_bounding_controller.BehaviorParameters(desired_velocity_x = velocity(input_idx))
             phase, event = controller.update(t)
-            #if phase == 1 and event == 1:
-                #action_front = Inputs_Joint_Position[input_idx]
 
-            #controller.get_action()
+            controller.get_action()
 
             q_true = env.step(action, action_dot)
             front_left_leg_swing_actual.append((q_true[1]-q_true[0])/2)

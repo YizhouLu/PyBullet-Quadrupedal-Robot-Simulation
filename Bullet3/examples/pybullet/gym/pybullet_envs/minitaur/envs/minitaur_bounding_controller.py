@@ -191,14 +191,6 @@ class MinitaurRaibertBoundingController(object):
         print('Start in phase ', self._phase_id)
         self._front = 1
         self._back = 0
-        # stance phase for each leg is happening at different time interval, no need to differentiate them
-        self._stance_start_leg_pose = self._get_average_leg_pose(FRONT_LEG_PAIR)
-        # swing phase for each leg could happen at the same time interval, need to differentiate them
-        self._swing_start_back_leg_pose = self._get_average_leg_pose(BACK_LEG_PAIR)
-        # for stance controller, need to know the initial x position of the foot with resptive to the hip
-        #current_pitch_angle = self.estimate_base_angle()
-        #inital_stance_foot_position = leg_pose_to_foot_position(self._stance_start_leg_pose, current_pitch_angle)
-        #self._stance_leg_controller.stance_x = inital_stance_foot_position[0]
 
     def update(self, t):
         print('time = ', t)
@@ -306,27 +298,49 @@ class MinitaurRaibertBoundingController(object):
 
         if self._phase_id == 1:
             if self._event_id == 1:
-                #front_stance_phase = math.fmod(self._time, 0.6) / self._behavior_parameters.front_stance_duration
-                #back_swing_phase = (math.fmod(self._time, 0.6) + 0.1) / self._behavior_parameters.back_swing_duration
-                front_leg_pose, target_front_leg_pose, front_phase = self.get_stance_leg_action(FRONT_LEG_PAIR, self._stance_start_leg_pose, front_stance_phase)
-                back_leg_pose, target_back_leg_pose, back_phase = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, back_swing_phase)
-
+                print('Start Stance Controller for Front Legs')
+                print('Continue Swing Controller for Back Legs')
+            elif self._event_id == 4:
+                print('Start Swing Controller for Back Legs')
+                print('Continue Stance Controller for Front Legs')
+            #front_stance_phase = math.fmod(self._time, 0.6) / self._behavior_parameters.front_stance_duration
+            #back_swing_phase = (math.fmod(self._time, 0.6) + 0.1) / self._behavior_parameters.back_swing_duration
+            #front_leg_pose, target_front_leg_pose, front_phase = self.get_stance_leg_action(FRONT_LEG_PAIR, self._stance_start_leg_pose, front_stance_phase)
+            #back_leg_pose, target_back_leg_pose, back_phase = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, back_swing_phase)
         elif self._phase_id == 2:
-            front_swing_phase = (math.fmod(self._time, 0.6) - 0.2) / self._behavior_parameters.front_swing_duration
-            back_swing_phase = (math.fmod(self._time, 0.6) + 0.1) / self._behavior_parameters.back_swing_duration
-            front_leg_pose, target_front_leg_pose, front_phase = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, front_swing_phase)
-            back_leg_pose, target_back_leg_pose, back_phase = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, back_swing_phase)
+            if self._event_id == 2:
+                print('Start Swing Controller for Front Legs')
+                print('Continue Stance Controller for Back Legs')
+            elif self._event_id == 3:
+                print('Start Stance Controller for Back Legs')
+                print('Continue Swing Controller for Front Legs')
+            #front_swing_phase = (math.fmod(self._time, 0.6) - 0.2) / self._behavior_parameters.front_swing_duration
+            #back_swing_phase = (math.fmod(self._time, 0.6) + 0.1) / self._behavior_parameters.back_swing_duration
+            #front_leg_pose, target_front_leg_pose, front_phase = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, front_swing_phase)
+            #back_leg_pose, target_back_leg_pose, back_phase = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, back_swing_phase)
         elif self._phase_id == 3:
-            front_swing_phase = (math.fmod(self._time, 0.6) - 0.2) / self._behavior_parameters.front_swing_duration
-            back_stance_phase = (math.fmod(self._time, 0.6) - 0.3) / self._behavior_parameters.back_stance_duration
-            front_leg_pose, target_front_leg_pose, front_phase = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, front_swing_phase)
-            back_leg_pose, target_back_leg_pose, back_phase = self.get_stance_leg_action(BACK_LEG_PAIR, self._stance_start_leg_pose, back_stance_phase)
+            if self._event_id == 2:
+                print('Start Swing Controller for Front Legs')
+                print('Continue Swing Controller for Back Legs')
+            if self._event_id == 4:
+                print('Start Swing Controller for Back Legs')
+                print('Continue Swing Controller for Front Legs')
+            #front_swing_phase = (math.fmod(self._time, 0.6) - 0.2) / self._behavior_parameters.front_swing_duration
+            #back_stance_phase = (math.fmod(self._time, 0.6) - 0.3) / self._behavior_parameters.back_stance_duration
+            #front_leg_pose, target_front_leg_pose, front_phase = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, front_swing_phase)
+            #back_leg_pose, target_back_leg_pose, back_phase = self.get_stance_leg_action(BACK_LEG_PAIR, self._stance_start_leg_pose, back_stance_phase)
         elif self._phase_id == 4:
-            front_swing_phase = (math.fmod(self._time, 0.6) - 0.2) / self._behavior_parameters.front_swing_duration
-            back_swing_phase = (math.fmod(self._time, 0.6) - 0.5) / self._behavior_parameters.back_swing_duration
-            front_leg_pose, target_front_leg_pose, front_phase = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, front_swing_phase)
-            back_leg_pose, target_back_leg_pose, back_phase = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, back_swing_phase)
-
+            if self._event_id == 1:
+                print('Start Stance Controller for Front Legs')
+                print('Continue Stance Controller for Back legs')
+            elif self._event_id == 3:
+                print('Start Stance Controller for Back Legs')
+                print('Continue Stance Controller for Front Legs')
+            #front_swing_phase = (math.fmod(self._time, 0.6) - 0.2) / self._behavior_parameters.front_swing_duration
+            #back_swing_phase = (math.fmod(self._time, 0.6) - 0.5) / self._behavior_parameters.back_swing_duration
+            #front_leg_pose, target_front_leg_pose, front_phase = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, front_swing_phase)
+            #back_leg_pose, target_back_leg_pose, back_phase = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, back_swing_phase)
+        """
         j = 0
         for i in FRONT_LEG_PAIR:
             leg_pose[i] = front_leg_pose[j][0]
@@ -340,6 +354,7 @@ class MinitaurRaibertBoundingController(object):
             j += 1
 
         return leg_pose_to_motor_angles(leg_pose), leg_pose, target_front_leg_pose, target_back_leg_pose
+        """
 
     @property
     def behavior_parameters(self):
