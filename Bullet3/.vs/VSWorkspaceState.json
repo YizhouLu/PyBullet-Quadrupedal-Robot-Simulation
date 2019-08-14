@@ -1,0 +1,13 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\examples",
+    "\\examples\\pybullet",
+    "\\examples\\pybullet\\gym",
+    "\\examples\\pybullet\\gym\\pybullet_envs",
+    "\\examples\\pybullet\\gym\\pybullet_envs\\minitaur",
+    "\\examples\\pybullet\\gym\\pybullet_envs\\minitaur\\envs"
+  ],
+  "SelectedNode": "\\examples\\pybullet\\gym\\pybullet_envs\\minitaur\\envs\\minitaur_bounding_controller_example.py",
+  "PreviewInSolutionExplorer": false
+}
