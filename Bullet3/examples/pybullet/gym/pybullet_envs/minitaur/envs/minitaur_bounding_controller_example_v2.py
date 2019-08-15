@@ -1,259 +1,147 @@
+#The example to run the raibert controller in a Minitaur gym env.
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-for _ in range(1):
-    import os, inspect
-    currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-    parentdir = os.path.dirname(os.path.dirname(os.path.dirname(currentdir)))
-    os.sys.path.insert(0, parentdir)
+import os, inspect, math, time, collections, copy, re
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(os.path.dirname(os.path.dirname(currentdir)))
+os.sys.path.insert(0, parentdir)
 
-    import tensorflow as tf, math, time, numpy as np, collections, copy, re, gym, pybullet
-    from pybullet_envs.minitaur.envs import minitaur_bounding_controller
-    from gym import spaces
-    from gym.utils import seeding
-    from pybullet_envs.minitaur.envs import bullet_client as BC, minitaur_logging as ML, minitaur_logging_pb2 as ML2
-    import pybullet_data
-    from pkg_resources import parse_version
-    import scipy.io as sio
-    import matplotlib.pyplot as plt
-    # MOTOR
-    for _ in range(1):
-        VOLTAGE_CLIPPING = 50
-        OBSERVED_TORQUE_LIMIT = 5.7
-        MOTOR_VOLTAGE = 16.0
-        MOTOR_RESISTANCE = 0.186
-        MOTOR_TORQUE_CONSTANT = 0.0954
-        MOTOR_VISCOUS_DAMPING = 0
-        MOTOR_SPEED_LIMIT = MOTOR_VOLTAGE / (MOTOR_VISCOUS_DAMPING + MOTOR_TORQUE_CONSTANT)
-        NUM_MOTORS = 8
-    # MINITAUR
-    for _ in range(1):
-        mat1 = sio.loadmat('vel_07_InitialCondition_to_VS.mat')
-        sorted(mat1.keys())
-        IP_Torso_Position = mat1['init_pos']
-        IP_Torso_Rotation = mat1['init_rot']
-        IP_Torso_Velocity = mat1['init_vel']
-        IP_Torso_AngularV = mat1['init_avel']
-        IP_Joint_Position = mat1['init_joint']
-        IP_Joint_Velocity = mat1['init_jvel']
-        INIT_POSITION = [IP_Torso_Position[0], IP_Torso_Position[1], IP_Torso_Position[2]]
-        INIT_RACK_POSITION = [0, 0, 1]
-        INIT_ORIENTATION = [IP_Torso_Rotation[0], IP_Torso_Rotation[1], IP_Torso_Rotation[2], IP_Torso_Rotation[3]]
-        INIT_VELOCITY = [IP_Torso_Velocity[0], IP_Torso_Velocity[1], IP_Torso_Velocity[2]]
-        INIT_ANGULAR_VELOCITY = [IP_Torso_AngularV[0],IP_Torso_AngularV[1],IP_Torso_AngularV[2]]
-        """
-        INIT_POSITION = [0, 0, 0.2]
-        INIT_RACK_POSITION = [0, 0, 1]
-        INIT_ORIENTATION = [0, 0, 0, 1]
-        INIT_VELOCITY = [0, 0, 0]
-        INIT_ANGULAR_VELOCITY = [0, 0, 0]
-        """
-        OVERHEAT_SHUTDOWN_TORQUE = 2.45
-        OVERHEAT_SHUTDOWN_TIME = 1.0
-        LEG_POSITION = ["front_left", "back_left", "front_right", "back_right"]
-        MOTOR_NAMES = [
-            "motor_front_leftL_joint", "motor_front_leftR_joint", "motor_back_leftL_joint",
-            "motor_back_leftR_joint", "motor_front_rightL_joint", "motor_front_rightR_joint",
-            "motor_back_rightL_joint", "motor_back_rightR_joint"
-        ]
-        _CHASSIS_NAME_PATTERN = re.compile(r"chassis\D*center")
-        _MOTOR_NAME_PATTERN = re.compile(r"motor\D*joint")
-        _KNEE_NAME_PATTERN = re.compile(r"knee\D*")
-        SENSOR_NOISE_STDDEV = (0.0, 0.0, 0.0, 0.0, 0.0)
-        TWO_PI = 2 * math.pi
-    # ENVIRONMENT
-    for _ in range(1):
-        NUM_MOTORS = 8
-        MOTOR_ANGLE_OBSERVATION_INDEX = 0
-        MOTOR_VELOCITY_OBSERVATION_INDEX = MOTOR_ANGLE_OBSERVATION_INDEX + NUM_MOTORS
-        MOTOR_TORQUE_OBSERVATION_INDEX = MOTOR_VELOCITY_OBSERVATION_INDEX + NUM_MOTORS
-        BASE_ORIENTATION_OBSERVATION_INDEX = MOTOR_TORQUE_OBSERVATION_INDEX + NUM_MOTORS
-        ACTION_EPS = 0.01
-        OBSERVATION_EPS = 0.01
-        RENDER_HEIGHT = 360
-        RENDER_WIDTH = 480
-        NUM_SIMULATION_ITERATION_STEPS = 300
-    # MAIN
-    for _ in range(1):
-        mat2 = sio.loadmat('vel_07_States_to_VS.mat')
-        sorted(mat2.keys())
-        base_velocity_x_desire = mat2['base_velocity_x']
-        base_angle_pitch_desire = mat2['base_angle_pitch']
-        base_position_z_desire = mat2['base_position_z']
+import scipy.io as sio
+mat1 = sio.loadmat('vel_07_InitialCondition_to_VS.mat')
+sorted(mat1.keys())
 
-        mat3 = sio.loadmat('vel_07_Inputs_to_VS.mat')
-        sorted(mat1.keys())
-        Inputs_Joint_Position = mat3['int_joint_position']
-        Inputs_Joint_Velocity = mat3['int_joint_velocity']
 
-        flags = tf.app.flags
-        FLAGS = tf.app.flags.FLAGS
+IP_Joint_Position = [math.pi / 2, math.pi / 2, -2.1686 + math.pi, -2.1686 + math.pi] * 4
+INIT_POSITION = [0, 0, 0.1914]
+INIT_RACK_POSITION = [0, 0, 1]
+INIT_ORIENTATION = [0, 0, 0, 1]
+INIT_VELOCITY = [0, 0, 0]
+INIT_ANGULAR_VELOCITY = [0, 0, 0]
+"""
+IP_Torso_Position = mat1['init_pos']
+IP_Torso_Rotation = mat1['init_rot']
+IP_Torso_Velocity = mat1['init_vel']
+IP_Torso_AngularV = mat1['init_avel']
+IP_Joint_Position = mat1['init_joint']
+IP_Joint_Velocity = mat1['init_jvel']
+INIT_POSITION = [IP_Torso_Position[0], IP_Torso_Position[1], IP_Torso_Position[2]]
+INIT_RACK_POSITION = [0, 0, 1]
+INIT_ORIENTATION = [IP_Torso_Rotation[0], IP_Torso_Rotation[1], IP_Torso_Rotation[2], IP_Torso_Rotation[3]]
+INIT_VELOCITY = [IP_Torso_Velocity[0], IP_Torso_Velocity[1], IP_Torso_Velocity[2]]
+INIT_ANGULAR_VELOCITY = [IP_Torso_AngularV[0],IP_Torso_AngularV[1],IP_Torso_AngularV[2]]
+"""
 
-        flags.DEFINE_float("motor_kp", 1.0, "The position gain of the motor.")
-        flags.DEFINE_float("motor_kd", 0.015, "The speed gain of the motor.")
-        flags.DEFINE_float("control_latency", 0.02, "The latency between sensor measurement and action"
-                           " execution the robot.")
-        flags.DEFINE_string("log_path", None, "The directory to write the log file.")
-
-        front_left_leg_swing_actual = []
-        front_left_leg_exten_actual = []
-        front_left_leg_swing_desire = []
-        front_left_leg_exten_desire = []
-
-        front_stance = []
-        front_swing = []
-        back_stance = []
-        back_swing = []
+KNEE_CONSTRAINT_POINT_RIGHT = [0, 0.005, 0.2]
+KNEE_CONSTRAINT_POINT_LEFT = [0, 0.01, 0.2]
+OVERHEAT_SHUTDOWN_TORQUE = 2.45
+OVERHEAT_SHUTDOWN_TIME = 1.0
+LEG_POSITION = ["front_left", "back_left", "front_right", "back_right"]
+MOTOR_NAMES = [
+    "motor_front_leftL_joint", "motor_front_leftR_joint", "motor_back_leftL_joint",
+    "motor_back_leftR_joint", "motor_front_rightL_joint", "motor_front_rightR_joint",
+    "motor_back_rightL_joint", "motor_back_rightR_joint"]
+_CHASSIS_NAME_PATTERN = re.compile(r"chassis\D*center")
+_MOTOR_NAME_PATTERN = re.compile(r"motor\D*joint")
+_KNEE_NAME_PATTERN = re.compile(r"knee\D*")
+SENSOR_NOISE_STDDEV = (0.0, 0.0, 0.0, 0.0, 0.0)
+TWO_PI = 2 * math.pi
 
 def MapToMinusPiToPi(angles):
-    """Maps a list of angles to [-pi, pi].
+  """Maps a list of angles to [-pi, pi].
 
-    Args:
-        angles: A list of angles in rad.
-    Returns:
-        A list of angle mapped to [-pi, pi].
-    """
-    mapped_angles = copy.deepcopy(angles)
-    for i in range(len(angles)):
-        mapped_angles[i] = math.fmod(angles[i], TWO_PI)
-        if mapped_angles[i] >= math.pi:
-            mapped_angles[i] -= TWO_PI
-        elif mapped_angles[i] < -math.pi:
-            mapped_angles[i] += TWO_PI
-    return mapped_angles
+  Args:
+    angles: A list of angles in rad.
+  Returns:
+    A list of angle mapped to [-pi, pi].
+  """
+  mapped_angles = copy.deepcopy(angles)
+  for i in range(len(angles)):
+    mapped_angles[i] = math.fmod(angles[i], TWO_PI)
+    if mapped_angles[i] >= math.pi:
+      mapped_angles[i] -= TWO_PI
+    elif mapped_angles[i] < -math.pi:
+      mapped_angles[i] += TWO_PI
+  return mapped_angles
+
+import gym
+from gym import spaces
+from gym.utils import seeding
+import numpy as np
+import pybullet
+from pybullet_envs.minitaur.envs import bullet_client as BC
+import pybullet_data
+from pybullet_envs.minitaur.envs import minitaur_logging
+from pybullet_envs.minitaur.envs import minitaur_logging_pb2
+from pybullet_envs.minitaur.envs import motor
+from pkg_resources import parse_version
+
+NUM_MOTORS = 8
+MOTOR_ANGLE_OBSERVATION_INDEX = 0
+MOTOR_VELOCITY_OBSERVATION_INDEX = MOTOR_ANGLE_OBSERVATION_INDEX + NUM_MOTORS
+MOTOR_TORQUE_OBSERVATION_INDEX = MOTOR_VELOCITY_OBSERVATION_INDEX + NUM_MOTORS
+BASE_ORIENTATION_OBSERVATION_INDEX = MOTOR_TORQUE_OBSERVATION_INDEX + NUM_MOTORS
+ACTION_EPS = 0.01
+OBSERVATION_EPS = 0.01
+RENDER_HEIGHT = 360
+RENDER_WIDTH = 480
+NUM_SIMULATION_ITERATION_STEPS = 300
 
 def convert_to_list(obj):
-    try:
-        iter(obj)
-        return obj
-    except TypeError:
-        return [obj]
+  try:
+    iter(obj)
+    return obj
+  except TypeError:
+    return [obj]
+
+import tensorflow as tf
+from pybullet_envs.minitaur.envs import minitaur_bounding_controller_v2_test as minitaur_bounding_controller
+from pybullet_envs.minitaur.envs import minitaur_gym_env
+flags = tf.app.flags
+FLAGS = tf.app.flags.FLAGS
+flags.DEFINE_float("motor_kp", 1.0, "The position gain of the motor.")
+flags.DEFINE_float("motor_kd", 0.015, "The speed gain of the motor.")
+flags.DEFINE_float("control_latency", 0.02, "The latency between sensor measurement and action"
+                   " execution the robot.")
+flags.DEFINE_string("log_path", None, "The directory to write the log file.")
+
+mat3 = sio.loadmat('vel_07_States_to_VS.mat')
+sorted(mat3.keys())
+base_velocity_x_desire = mat3['base_velocity_x']
+base_angle_pitch_desire = mat3['base_angle_pitch']
+base_position_z_desire = mat3['base_position_z']
+
+import matplotlib.pyplot as plt
+desired_base_pitch_angle = []
+actual_base_pitch_angle = []
+desired_front_leg_swing = []
+desired_front_leg_exten = []
+desired_back_leg_swing = []
+desired_back_leg_exten = []
+actual_front_leg_swing = []
+actual_front_leg_exten = []
+actual_back_leg_swing = []
+actual_back_leg_exten = []
+front_phase_all = []
+back_phase_all = []
+target_front_leg_swing_all = []
+target_front_leg_exten_all = []
+target_back_leg_swing_all = []
+target_back_leg_exten_all = []
+
 
 def velocity(iter):
     return base_velocity_x_desire[iter]
 
-class MotorModel(object):
-  """The accurate motor model, which is based on the physics of DC motors.
+def angle(iter):
+    #return base_angle_pitch_desire[iter]
+    desired_pitch_angle = 0.2 * math.cos(2*math.pi*iter/600)
+    return desired_pitch_angle
 
-  The motor model support two types of control: position control and torque
-  control. In position control mode, a desired motor angle is specified, and a
-  torque is computed based on the internal motor model. When the torque control
-  is specified, a pwm signal in the range of [-1.0, 1.0] is converted to the
-  torque.
-
-  The internal motor model takes the following factors into consideration:
-  pd gains, viscous friction, back-EMF voltage and current-torque profile.
-  """
-
-  def __init__(self, torque_control_enabled=False, kp=1.2, kd=0):
-    self._torque_control_enabled = torque_control_enabled
-    self._kp = kp
-    self._kd = kd
-    self._resistance = MOTOR_RESISTANCE
-    self._voltage = MOTOR_VOLTAGE
-    self._torque_constant = MOTOR_TORQUE_CONSTANT
-    self._viscous_damping = MOTOR_VISCOUS_DAMPING
-    self._current_table = [0, 10, 20, 30, 40, 50, 60]
-    self._torque_table = [0, 1, 1.9, 2.45, 3.0, 3.25, 3.5]
-    self._strength_ratios = [1.0] * NUM_MOTORS
-
-  def set_strength_ratios(self, ratios):
-    """Set the strength of each motors relative to the default value.
-
-    Args:
-      ratios: The relative strength of motor output. A numpy array ranging from
-        0.0 to 1.0.
-    """
-    self._strength_ratios = np.array(ratios)
-
-  def set_motor_gains(self, kp, kd):
-    """Set the gains of all motors.
-
-    These gains are PD gains for motor positional control. kp is the
-    proportional gain and kd is the derivative gain.
-
-    Args:
-      kp: proportional gain of the motors.
-      kd: derivative gain of the motors.
-    """
-    self._kp = kp
-    self._kd = kd
-
-  def set_voltage(self, voltage):
-    self._voltage = voltage
-
-  def get_voltage(self):
-    return self._voltage
-
-  def set_viscous_damping(self, viscous_damping):
-    self._viscous_damping = viscous_damping
-
-  def get_viscous_dampling(self):
-    return self._viscous_damping
-
-  def convert_to_torque(self, angle_commands, true_motor_angle, velocity_commands, true_motor_velocity, kp=None, kd=None):
-    """Convert the commands (position control or torque control) to torque.
-
-    Args:
-      motor_commands: The desired motor angle if the motor is in position
-        control mode. The pwm signal if the motor is in torque control mode.
-      motor_angle: The motor angle observed at the current time step. It is
-        actually the true motor angle observed a few milliseconds ago (pd
-        latency).
-      motor_velocity: The motor velocity observed at the current time step, it
-        is actually the true motor velocity a few milliseconds ago (pd latency).
-      true_motor_velocity: The true motor velocity. The true velocity is used
-        to compute back EMF voltage and viscous damping.
-      kp: Proportional gains for the motors' PD controllers. If not provided, it
-        uses the default kp of the minitaur for all the motors.
-      kd: Derivative gains for the motors' PD controllers. If not provided, it
-        uses the default kp of the minitaur for all the motors.
-
-    Returns:
-      actual_torque: The torque that needs to be applied to the motor.
-      observed_torque: The torque observed by the sensor.
-    """
-    if self._torque_control_enabled:
-      pwm = motor_commands
-    else:
-      if kp is None:
-        kp = np.full(NUM_MOTORS, self._kp)
-      if kd is None:
-        kd = np.full(NUM_MOTORS, self._kd)
-      pwm = kp * (angle_commands - true_motor_angle) + kd * (velocity_commands - true_motor_velocity)
-
-    pwm = np.clip(pwm, -1.0, 1.0)
-    return self._convert_to_torque_from_pwm(pwm, true_motor_velocity)
-
-  def _convert_to_torque_from_pwm(self, pwm, true_motor_velocity):
-    """Convert the pwm signal to torque.
-
-    Args:
-      pwm: The pulse width modulation.
-      true_motor_velocity: The true motor velocity at the current moment. It is
-        used to compute the back EMF voltage and the viscous damping.
-    Returns:
-      actual_torque: The torque that needs to be applied to the motor.
-      observed_torque: The torque observed by the sensor.
-    """
-    observed_torque = np.clip(
-        self._torque_constant * (np.asarray(pwm) * self._voltage / self._resistance),
-        -OBSERVED_TORQUE_LIMIT, OBSERVED_TORQUE_LIMIT)
-
-    # Net voltage is clipped at 50V by diodes on the motor controller.
-    voltage_net = np.clip(
-        np.asarray(pwm) * self._voltage -
-        (self._torque_constant + self._viscous_damping) * np.asarray(true_motor_velocity),
-        -VOLTAGE_CLIPPING, VOLTAGE_CLIPPING)
-    current = voltage_net / self._resistance
-    current_sign = np.sign(current)
-    current_magnitude = np.absolute(current)
-    # Saturate torque based on empirical current relation.
-    actual_torque = np.interp(current_magnitude, self._current_table, self._torque_table)
-    actual_torque = np.multiply(current_sign, actual_torque)
-    actual_torque = np.multiply(self._strength_ratios, actual_torque)
-    return actual_torque, observed_torque
+def position(iter):
+    return base_position_z_desire[iter]
 
 class Minitaur(object):
   """The minitaur class that simulates a quadruped robot from Ghost Robotics.
@@ -342,7 +230,7 @@ class Minitaur(object):
     if self._accurate_motor_model_enabled:
       self._kp = motor_kp
       self._kd = motor_kd
-      self._motor_model = MotorModel(torque_control_enabled=self._torque_control_enabled,
+      self._motor_model = motor.MotorModel(torque_control_enabled=self._torque_control_enabled,
                                            kp=self._kp,
                                            kd=self._kd)
     elif self._pd_control_enabled:
@@ -360,9 +248,9 @@ class Minitaur(object):
   def GetTimeSinceReset(self):
     return self._step_counter * self.time_step
 
-  def Step(self, action, action_dot):
+  def Step(self, action):
     for _ in range(self._action_repeat):
-      self.ApplyAction(action, action_dot)
+      self.ApplyAction(action)
       self._pybullet_client.stepSimulation()
       self.ReceiveObservation()
       self._step_counter += 1
@@ -513,7 +401,7 @@ class Minitaur(object):
       if default_motor_angles is not None:
         num_steps_to_reset = int(reset_time / self.time_step)
         for _ in range(num_steps_to_reset):
-          self.ApplyAction(default_motor_angles, [0] * self.num_motors)
+          self.ApplyAction(default_motor_angles)
           self._pybullet_client.stepSimulation()
           self.ReceiveObservation()
     self.ReceiveObservation()
@@ -563,12 +451,12 @@ class Minitaur(object):
                                           self._motor_direction[2 * leg_id] * IP_Joint_Position[4 * leg_id],
                                           targetVelocity=0)
     self._pybullet_client.resetJointState(self.quadruped,
-                                          self._joint_name_to_id["motor_" + leg_position + "R_joint"],
-                                          self._motor_direction[2 * leg_id + 1] * IP_Joint_Position[4 * leg_id + 1],
-                                          targetVelocity=0)
-    self._pybullet_client.resetJointState(self.quadruped,
                                           self._joint_name_to_id["knee_" + leg_position + "L_link"],
                                           self._motor_direction[2 * leg_id] * -(math.pi - IP_Joint_Position[4 * leg_id + 2]),
+                                          targetVelocity=0)
+    self._pybullet_client.resetJointState(self.quadruped,
+                                          self._joint_name_to_id["motor_" + leg_position + "R_joint"],
+                                          self._motor_direction[2 * leg_id + 1] * IP_Joint_Position[4 * leg_id + 1],
                                           targetVelocity=0)
     self._pybullet_client.resetJointState(self.quadruped,
                                           self._joint_name_to_id["knee_" + leg_position + "R_link"],
@@ -578,7 +466,8 @@ class Minitaur(object):
       self._pybullet_client.createConstraint(
           self.quadruped, self._joint_name_to_id["knee_" + leg_position + "R_link"],
           self.quadruped, self._joint_name_to_id["knee_" + leg_position + "L_link"],
-          self._pybullet_client.JOINT_POINT2POINT, [0, 0, 0], [0, 0.005, 0.2], [0, 0.01, 0.2])
+          self._pybullet_client.JOINT_POINT2POINT, [0, 0, 0], KNEE_CONSTRAINT_POINT_RIGHT,
+          KNEE_CONSTRAINT_POINT_LEFT)
 
     if self._accurate_motor_model_enabled or self._pd_control_enabled:
       # Disable the default motor in pybullet.
@@ -743,15 +632,6 @@ class Minitaur(object):
     """
     return self._pybullet_client.getQuaternionFromEuler(self.GetBaseRollPitchYaw())
 
-  def GetTrueBaseVelocity(self):
-    """Get the rate of orientation change of the minitaur's base in euler angle.
-
-    Returns:
-      rate of (roll, pitch, yaw) change of the minitaur's base.
-    """
-    vel = self._pybullet_client.getBaseVelocity(self.quadruped)
-    return np.asarray([vel[0][0], vel[0][1], vel[0][2]])
-
   def GetTrueBaseRollPitchYawRate(self):
     """Get the rate of orientation change of the minitaur's base in euler angle.
 
@@ -760,6 +640,15 @@ class Minitaur(object):
     """
     vel = self._pybullet_client.getBaseVelocity(self.quadruped)
     return np.asarray([vel[1][0], vel[1][1], vel[1][2]])
+
+  def GetTrueBaseVelocity(self):
+    """Get the rate of orientation change of the minitaur's base in euler angle.
+
+    Returns:
+      rate of (roll, pitch, yaw) change of the minitaur's base.
+    """
+    vel = self._pybullet_client.getBaseVelocity(self.quadruped)
+    return np.asarray([vel[0][0], vel[0][1], vel[0][2]])
 
   def GetBaseRollPitchYawRate(self):
     """Get the rate of orientation change of the minitaur's base in euler angle.
@@ -781,7 +670,7 @@ class Minitaur(object):
     """
     return self.num_motors
 
-  def ApplyAction(self, angle_commands, velocity_commands, motor_kps=None, motor_kds=None):
+  def ApplyAction(self, motor_commands, motor_kps=None, motor_kds=None):
     """Set the desired motor angles to the motors of the minitaur.
 
     The desired motor angles are clipped based on the maximum allowed velocity.
@@ -809,10 +698,11 @@ class Minitaur(object):
       motor_kds = np.full(8, self._kd)
 
     if self._accurate_motor_model_enabled or self._pd_control_enabled:
-      true_motor_angle = self.GetTrueMotorAngles()
-      true_motor_velocity = self.GetTrueMotorVelocities()
+      q, qdot = self._GetPDObservation()
+      qdot_true = self.GetTrueMotorVelocities()
       if self._accurate_motor_model_enabled:
-        actual_torque, observed_torque = self._motor_model.convert_to_torque(angle_commands, true_motor_angle, velocity_commands, true_motor_velocity, motor_kps, motor_kds)
+        actual_torque, observed_torque = self._motor_model.convert_to_torque(
+            motor_commands, q, qdot, qdot_true, motor_kps, motor_kds)
         if self._motor_overheat_protection:
           for i in range(self.num_motors):
             if abs(actual_torque[i]) > OVERHEAT_SHUTDOWN_TORQUE:
@@ -1211,16 +1101,6 @@ class MinitaurGymEnv(gym.Env):
 
     Args:
       urdf_root: The path to the urdf data folder.
-      urdf_version: [DEFAULT_URDF_VERSION, DERPY_V0_URDF_VERSION,
-        RAINBOW_DASH_V0_URDF_VERSION] are allowable
-        versions. If None, DEFAULT_URDF_VERSION is used. DERPY_V0_URDF_VERSION
-        is the result of first pass system identification for derpy.
-        We will have a different URDF and related Minitaur class each time we
-        perform system identification. While the majority of the code of the
-        class remains the same, some code changes (e.g. the constraint location
-        might change). __init__() will choose the right Minitaur class from
-        different minitaur modules based on
-        urdf_version.
       distance_weight: The weight of the distance term in the reward.
       energy_weight: The weight of the energy term in the reward.
       shake_weight: The weight of the vertical shakiness term in the reward.
@@ -1275,7 +1155,7 @@ class MinitaurGymEnv(gym.Env):
     """
     # Set up logging.
     self._log_path = log_path
-    self.logging = ML.MinitaurLogging(log_path)
+    self.logging = minitaur_logging.MinitaurLogging(log_path)
     # PD control needs smaller time step for stability.
     if control_time_step is not None:
       self.control_time_step = control_time_step
@@ -1331,13 +1211,13 @@ class MinitaurGymEnv(gym.Env):
     self._ground_id = None
     self._reflection = reflection
     self._env_randomizers = convert_to_list(env_randomizer) if env_randomizer else []
-    self._episode_proto = ML2.MinitaurEpisode()
+    self._episode_proto = minitaur_logging_pb2.MinitaurEpisode()
     if self._is_render:
       self._pybullet_client = BC.BulletClient(connection_mode=pybullet.GUI)
     else:
       self._pybullet_client = BC.BulletClient()
     if self._urdf_version is None:
-      self._urdf_version = DEFAULT_URDF_VERSION
+      self._urdf_version = "default"
     self._pybullet_client.setPhysicsEngineParameter(enableConeFriction=0)
     self.seed()
     self.reset()
@@ -1362,8 +1242,8 @@ class MinitaurGymEnv(gym.Env):
     self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_RENDERING, 0)
     if self._env_step_counter > 0:
       self.logging.save_episode(self._episode_proto)
-    self._episode_proto = ML2.MinitaurEpisode()
-    ML.preallocate_episode_proto(self._episode_proto, self._num_steps_to_log)
+    self._episode_proto = minitaur_logging_pb2.MinitaurEpisode()
+    minitaur_logging.preallocate_episode_proto(self._episode_proto, self._num_steps_to_log)
     if self._hard_reset:
       self._pybullet_client.resetSimulation()
       self._pybullet_client.setPhysicsEngineParameter(
@@ -1377,6 +1257,7 @@ class MinitaurGymEnv(gym.Env):
       self._pybullet_client.setGravity(0, 0, -10)
       acc_motor = self._accurate_motor_model_enabled
       motor_protect = self._motor_overheat_protection
+
       self.minitaur = Minitaur(
             pybullet_client=self._pybullet_client,
             action_repeat=self._action_repeat,
@@ -1425,7 +1306,7 @@ class MinitaurGymEnv(gym.Env):
       action = self.minitaur.ConvertFromLegModel(action)
     return action
 
-  def step(self, action, action_dot):
+  def step(self, action):
     """Step forward the simulation, given the action.
 
     Args:
@@ -1460,11 +1341,11 @@ class MinitaurGymEnv(gym.Env):
       env_randomizer.randomize_step(self)
 
     action = self._transform_action_to_motor_command(action)
-    self.minitaur.Step(action, action_dot)
+    self.minitaur.Step(action)
     reward = self._reward()
     done = self._termination()
     if self._log_path is not None:
-      ML.update_episode_proto(self._episode_proto, self.minitaur, action,
+      minitaur_logging.update_episode_proto(self._episode_proto, self.minitaur, action,
                                             self._env_step_counter)
     self._env_step_counter += 1
     if done:
@@ -1482,7 +1363,11 @@ class MinitaurGymEnv(gym.Env):
         pitch=self._cam_pitch,
         roll=0,
         upAxisIndex=2)
-    proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(fov=60, aspect=float(RENDER_WIDTH) / RENDER_HEIGHT, nearVal=0.1, farVal=100.0)
+    proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(fov=60,
+                                                                   aspect=float(RENDER_WIDTH) /
+                                                                   RENDER_HEIGHT,
+                                                                   nearVal=0.1,
+                                                                   farVal=100.0)
     (_, _, px, _, _) = self._pybullet_client.getCameraImage(
         width=RENDER_WIDTH,
         height=RENDER_HEIGHT,
@@ -1499,7 +1384,8 @@ class MinitaurGymEnv(gym.Env):
     Returns:
       A numpy array of motor angles.
     """
-    return np.array(self._observation[MOTOR_ANGLE_OBSERVATION_INDEX:MOTOR_ANGLE_OBSERVATION_INDEX +  NUM_MOTORS])
+    return np.array(self._observation[MOTOR_ANGLE_OBSERVATION_INDEX:MOTOR_ANGLE_OBSERVATION_INDEX +
+                                      NUM_MOTORS])
 
   def get_minitaur_motor_velocities(self):
     """Get the minitaur's motor velocities.
@@ -1508,7 +1394,8 @@ class MinitaurGymEnv(gym.Env):
       A numpy array of motor velocities.
     """
     return np.array(
-        self._observation[MOTOR_VELOCITY_OBSERVATION_INDEX:MOTOR_VELOCITY_OBSERVATION_INDEX + NUM_MOTORS])
+        self._observation[MOTOR_VELOCITY_OBSERVATION_INDEX:MOTOR_VELOCITY_OBSERVATION_INDEX +
+                          NUM_MOTORS])
 
   def get_minitaur_motor_torques(self):
     """Get the minitaur's motor torques.
@@ -1517,7 +1404,8 @@ class MinitaurGymEnv(gym.Env):
       A numpy array of motor torques.
     """
     return np.array(
-        self._observation[MOTOR_TORQUE_OBSERVATION_INDEX:MOTOR_TORQUE_OBSERVATION_INDEX + NUM_MOTORS])
+        self._observation[MOTOR_TORQUE_OBSERVATION_INDEX:MOTOR_TORQUE_OBSERVATION_INDEX +
+                          NUM_MOTORS])
 
   def get_minitaur_base_orientation(self):
     """Get the minitaur's base orientation, represented by a quaternion.
@@ -1611,12 +1499,14 @@ class MinitaurGymEnv(gym.Env):
       The observation list. observation[0:8] are motor angles. observation[8:16]
       are motor velocities, observation[16:24] are motor torques.
       observation[24:28] is the orientation of the base, in quaternion form.
+      observation[28:31] is the orientation of the base, in roll-pitch-yaw form
     """
     observation = []
     observation.extend(self.minitaur.GetTrueMotorAngles().tolist())
     observation.extend(self.minitaur.GetTrueMotorVelocities().tolist())
     observation.extend(self.minitaur.GetTrueMotorTorques().tolist())
     observation.extend(list(self.minitaur.GetTrueBaseOrientation()))
+    observation.extend(self.minitaur.GetTrueBaseRollPitchYaw())
 
     self._true_observation = observation
     return self._true_observation
@@ -1631,8 +1521,8 @@ class MinitaurGymEnv(gym.Env):
     upper_bound = np.zeros(self._get_observation_dimension())
     num_motors = self.minitaur.num_motors
     upper_bound[0:num_motors] = math.pi  # Joint angle.
-    upper_bound[num_motors:2 * num_motors] = MOTOR_SPEED_LIMIT  # Joint velocity.
-    upper_bound[2 * num_motors:3 * num_motors] = OBSERVED_TORQUE_LIMIT  # Joint torque.
+    upper_bound[num_motors:2 * num_motors] = (motor.MOTOR_SPEED_LIMIT)  # Joint velocity.
+    upper_bound[2 * num_motors:3 * num_motors] = (motor.OBSERVED_TORQUE_LIMIT)  # Joint torque.
     upper_bound[3 * num_motors:] = 1.0  # Quaternion of base orientation.
     return upper_bound
 
@@ -1698,9 +1588,9 @@ def main(argv):
     try:
         env = MinitaurGymEnv(
             urdf_version="default",
-            control_time_step=0.006,
-            action_repeat=6,
-            pd_latency=0.003,
+            control_time_step=0.001,
+            action_repeat=1,
+            pd_latency=0,
             control_latency=FLAGS.control_latency,
             motor_kp=FLAGS.motor_kp,
             motor_kd=FLAGS.motor_kd,
@@ -1714,35 +1604,57 @@ def main(argv):
 
         controller = minitaur_bounding_controller.MinitaurRaibertBoundingController(env.minitaur)
 
-        num_iter = range(300)
         tstart = env.minitaur.GetTimeSinceReset()
+        num_iter = range(600 * 5)
         for i in num_iter:
             print('iteration number = ', i)
-            input_idx = int(math.fmod(i,102))
+            input_idx = int(math.fmod(i,611))
             print('input index = ', input_idx)
-            action = Inputs_Joint_Position[input_idx]
-            action_dot = Inputs_Joint_Velocity[input_idx]
-
             t = env.minitaur.GetTimeSinceReset() - tstart
-            controller.behavior_parameters = minitaur_bounding_controller.BehaviorParameters(desired_velocity_x = velocity(input_idx))
-            phase, event = controller.update(t)
+            controller.behavior_parameters = minitaur_bounding_controller.BehaviorParameters(
+                desired_velocity_x = velocity(input_idx),
+                desired_angle_pitch = angle(input_idx),
+                desired_position_z = position(input_idx))
 
-            controller.get_action()
+            desired_base_pitch_angle.append(angle(input_idx))
+            controller.update(t)
 
-            q_true = env.step(action, action_dot)
-            front_left_leg_swing_actual.append((q_true[1]-q_true[0])/2)
-            front_left_leg_exten_actual.append((q_true[1]+q_true[0])/2)
-            front_left_leg_swing_desire.append((action[1]-action[0])/2)
-            front_left_leg_exten_desire.append((action[1]+action[0])/2)
-            input('-------------Pause-------------')
+            motor_angles, leg_pose, target_front_leg_pose, target_back_leg_pose = controller.get_action()
+            desired_front_leg_swing.append(leg_pose[0])
+            desired_front_leg_exten.append(leg_pose[4])
+            desired_back_leg_swing.append(leg_pose[1])
+            desired_back_leg_exten.append(leg_pose[5])
+            target_front_leg_swing_all.append(target_front_leg_pose[0])
+            target_front_leg_exten_all.append(target_front_leg_pose[1])
+            target_back_leg_swing_all.append(target_back_leg_pose[0])
+            target_back_leg_exten_all.append(target_back_leg_pose[1])
+
+            q_true = env.step(motor_angles)
+            actual_front_leg_swing.append((q_true[1]-q_true[0])/2)
+            actual_front_leg_exten.append((q_true[1]+q_true[0])/2)
+            actual_back_leg_swing.append((q_true[3]-q_true[2])/2)
+            actual_back_leg_exten.append((q_true[3]+q_true[2])/2)
+
+            actual_base_pitch_angle.append(q_true[29])
+
+            input('--------Go To Next Iteration--------')
 
         plt.figure(1)
         plt.subplot(2,1,1)
-        plt.plot(num_iter, front_left_leg_swing_actual, num_iter, front_left_leg_swing_desire)
-        plt.ylabel('Swing')
+        plt.plot(num_iter, desired_front_leg_swing, num_iter, actual_front_leg_swing, num_iter, target_front_leg_swing_all)
+        plt.ylabel('front leg swing')
         plt.subplot(2,1,2)
-        plt.plot(num_iter, front_left_leg_exten_actual, num_iter, front_left_leg_exten_desire)
-        plt.ylabel('Extension')
+        plt.plot(num_iter, desired_back_leg_swing, num_iter, actual_back_leg_swing, num_iter, target_back_leg_swing_all)
+        plt.ylabel('back leg swing')
+        plt.figure(2)
+        plt.subplot(2,1,1)
+        plt.plot(num_iter, desired_front_leg_exten, num_iter, actual_front_leg_exten, num_iter, target_front_leg_exten_all)
+        plt.ylabel('front leg extension')
+        plt.subplot(2,1,2)
+        plt.plot(num_iter, desired_back_leg_exten, num_iter, actual_back_leg_exten, num_iter, target_back_leg_exten_all)
+        plt.ylabel('back leg extension')
+        plt.figure(3)
+        plt.plot(num_iter, desired_base_pitch_angle, num_iter, actual_base_pitch_angle)
         plt.draw()
     finally:
         env.close()
