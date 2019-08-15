@@ -101,6 +101,11 @@ for _ in range(1):
         front_left_leg_swing_desire = []
         front_left_leg_exten_desire = []
 
+        front_stance = []
+        front_swing = []
+        back_stance = []
+        back_swing = []
+
 def MapToMinusPiToPi(angles):
     """Maps a list of angles to [-pi, pi].
 
@@ -1729,7 +1734,7 @@ def main(argv):
             front_left_leg_exten_actual.append((q_true[1]+q_true[0])/2)
             front_left_leg_swing_desire.append((action[1]-action[0])/2)
             front_left_leg_exten_desire.append((action[1]+action[0])/2)
-            input('-------------Pause-------------')
+            #input('-------------Pause-------------')
 
         plt.figure(1)
         plt.subplot(2,1,1)
