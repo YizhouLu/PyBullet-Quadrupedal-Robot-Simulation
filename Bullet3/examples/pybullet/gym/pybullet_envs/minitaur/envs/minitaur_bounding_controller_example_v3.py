@@ -9,7 +9,7 @@ for _ in range(1):
     os.sys.path.insert(0, parentdir)
 
     import tensorflow as tf, math, time, numpy as np, collections, copy, re, gym, pybullet
-    from pybullet_envs.minitaur.envs import minitaur_bounding_controller
+    from pybullet_envs.minitaur.envs import minitaur_bounding_controller_v3 as minitaur_bounding_controller
     from gym import spaces
     from gym.utils import seeding
     from pybullet_envs.minitaur.envs import bullet_client as BC, minitaur_logging as ML, minitaur_logging_pb2 as ML2
