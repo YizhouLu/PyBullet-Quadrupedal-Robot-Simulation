@@ -29,7 +29,7 @@ for _ in range(1):
         NUM_MOTORS = 8
     # MINITAUR
     for _ in range(1):
-        mat1 = sio.loadmat('vel_07_InitialCondition_to_VS.mat')
+        mat1 = sio.loadmat('vel_07_InitialCondition_to_VS_0006.mat')
         sorted(mat1.keys())
         IP_Torso_Position = mat1['init_pos']
         IP_Torso_Rotation = mat1['init_rot']
@@ -76,16 +76,24 @@ for _ in range(1):
         NUM_SIMULATION_ITERATION_STEPS = 300
     # MAIN
     for _ in range(1):
-        mat2 = sio.loadmat('vel_07_States_to_VS.mat')
+        mat2 = sio.loadmat('vel_07_States_to_VS_0006.mat')
         sorted(mat2.keys())
         base_velocity_x_desire = mat2['base_velocity_x']
         base_angle_pitch_desire = mat2['base_angle_pitch']
         base_position_z_desire = mat2['base_position_z']
 
-        mat3 = sio.loadmat('vel_07_Inputs_to_VS.mat')
+        mat3 = sio.loadmat('vel_07_Inputs_to_VS_0006.mat')
         sorted(mat1.keys())
         Inputs_Joint_Position = mat3['int_joint_position']
         Inputs_Joint_Velocity = mat3['int_joint_velocity']
+
+        mat4 = sio.loadmat('vel_07_Inputs_to_VS_0006_FrontStance')
+        sorted(mat4.keys())
+        Inputs_Joint_Position_Front_Stance = mat4['int_front_leg_pose']
+
+        mat5 = sio.loadmat('vel_07_Inputs_to_VS_0006_BackStance')
+        sorted(mat5.keys())
+        Inputs_Joint_Position_Back_Stance = mat5['int_back_leg_pose']
 
         flags = tf.app.flags
         FLAGS = tf.app.flags.FLAGS
@@ -101,10 +109,8 @@ for _ in range(1):
         front_left_leg_swing_desire = []
         front_left_leg_exten_desire = []
 
-        front_stance = []
-        front_swing = []
-        back_stance = []
-        back_swing = []
+        front_phase_all = []
+        back_phase_all = []
 
 def MapToMinusPiToPi(angles):
     """Maps a list of angles to [-pi, pi].
@@ -1714,7 +1720,7 @@ def main(argv):
 
         controller = minitaur_bounding_controller.MinitaurRaibertBoundingController(env.minitaur)
 
-        num_iter = range(300)
+        num_iter = range(1000)
         tstart = env.minitaur.GetTimeSinceReset()
         for i in num_iter:
             print('iteration number = ', i)
@@ -1727,9 +1733,9 @@ def main(argv):
             controller.behavior_parameters = minitaur_bounding_controller.BehaviorParameters(desired_velocity_x = velocity(input_idx))
             phase, event = controller.update(t)
 
-            controller.get_action()
-
+            action, leg_pose = controller.get_action(Inputs_Joint_Position_Front_Stance, Inputs_Joint_Position_Back_Stance)
             q_true = env.step(action, action_dot)
+            print((q_true[1]-q_true[0])/2)
             front_left_leg_swing_actual.append((q_true[1]-q_true[0])/2)
             front_left_leg_exten_actual.append((q_true[1]+q_true[0])/2)
             front_left_leg_swing_desire.append((action[1]-action[0])/2)

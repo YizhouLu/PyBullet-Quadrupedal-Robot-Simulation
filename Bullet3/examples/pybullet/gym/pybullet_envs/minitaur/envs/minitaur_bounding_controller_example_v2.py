@@ -10,7 +10,7 @@ parentdir = os.path.dirname(os.path.dirname(os.path.dirname(currentdir)))
 os.sys.path.insert(0, parentdir)
 
 import scipy.io as sio
-mat1 = sio.loadmat('vel_07_InitialCondition_to_VS.mat')
+mat1 = sio.loadmat('vel_07_InitialCondition_to_VS_0001.mat')
 sorted(mat1.keys())
 
 
@@ -107,7 +107,7 @@ flags.DEFINE_float("control_latency", 0.02, "The latency between sensor measurem
                    " execution the robot.")
 flags.DEFINE_string("log_path", None, "The directory to write the log file.")
 
-mat3 = sio.loadmat('vel_07_States_to_VS.mat')
+mat3 = sio.loadmat('vel_07_States_to_VS_0001.mat')
 sorted(mat3.keys())
 base_velocity_x_desire = mat3['base_velocity_x']
 base_angle_pitch_desire = mat3['base_angle_pitch']
@@ -126,6 +126,10 @@ actual_back_leg_swing = []
 actual_back_leg_exten = []
 front_phase_all = []
 back_phase_all = []
+front_stance_all=[]
+front_swing_all =[]
+back_stance_all =[]
+back_swing_all = []
 target_front_leg_swing_all = []
 target_front_leg_exten_all = []
 target_back_leg_swing_all = []
@@ -1605,7 +1609,7 @@ def main(argv):
         controller = minitaur_bounding_controller.MinitaurRaibertBoundingController(env.minitaur)
 
         tstart = env.minitaur.GetTimeSinceReset()
-        num_iter = range(600 * 5)
+        num_iter = range(611)
         for i in num_iter:
             print('iteration number = ', i)
             input_idx = int(math.fmod(i,611))
@@ -1619,7 +1623,7 @@ def main(argv):
             desired_base_pitch_angle.append(angle(input_idx))
             controller.update(t)
 
-            motor_angles, leg_pose, target_front_leg_pose, target_back_leg_pose = controller.get_action()
+            motor_angles, leg_pose, target_front_leg_pose, target_back_leg_pose, front_phase, back_phase = controller.get_action()
             desired_front_leg_swing.append(leg_pose[0])
             desired_front_leg_exten.append(leg_pose[4])
             desired_back_leg_swing.append(leg_pose[1])
@@ -1629,6 +1633,9 @@ def main(argv):
             target_back_leg_swing_all.append(target_back_leg_pose[0])
             target_back_leg_exten_all.append(target_back_leg_pose[1])
 
+            front_phase_all.append(front_phase)
+            back_phase_all.append(back_phase)
+
             q_true = env.step(motor_angles)
             actual_front_leg_swing.append((q_true[1]-q_true[0])/2)
             actual_front_leg_exten.append((q_true[1]+q_true[0])/2)
@@ -1637,7 +1644,7 @@ def main(argv):
 
             actual_base_pitch_angle.append(q_true[29])
 
-            input('--------Go To Next Iteration--------')
+            #input('--------Go To Next Iteration--------')
 
         plt.figure(1)
         plt.subplot(2,1,1)
@@ -1655,6 +1662,8 @@ def main(argv):
         plt.ylabel('back leg extension')
         plt.figure(3)
         plt.plot(num_iter, desired_base_pitch_angle, num_iter, actual_base_pitch_angle)
+        plt.figure(4)
+        plt.plot(num_iter, front_phase_all, num_iter, back_phase_all)
         plt.draw()
     finally:
         env.close()

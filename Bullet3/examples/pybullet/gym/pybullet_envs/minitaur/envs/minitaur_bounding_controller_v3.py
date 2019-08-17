@@ -99,7 +99,7 @@ def ankle_dist_to_extension(dist):
     return math.acos(cos_ext)
 
 def generate_swing_trajectory(phase, init_pose, end_pose):
-    normalized_phase = phase
+    normalized_phase = min(phase * 3, 1)
 
     sw = (end_pose[0] - init_pose[0]) * normalized_phase + init_pose[0]
     ext = (end_pose[1] - init_pose[1]) * normalized_phase + init_pose[1]
@@ -121,21 +121,23 @@ class RaibertSwingLegController(object):
         self._leg_trajectory_generator = leg_trajectory_generator
 
     def get_action(self, raibert_controller, swing_set, swing_start_leg_pose, phase):
-        print('Swing Controller')
+
+
         current_speed = raibert_controller.estimate_base_velocity()
         current_angle = raibert_controller.estimate_base_angle()
 
         leg_pose_set = []
         for i in swing_set:
-            desired_tilting_angle = raibert_controller.behavior_parameters.desired_angle_pitch
+            #desired_tilting_angle = raibert_controller.behavior_parameters.desired_angle_pitch
 
-            target_leg_swing = -1 * current_angle
-            target_leg_exten = raibert_controller.nominal_leg_extension + 0.45
-            target_leg_pose = (target_leg_swing, target_leg_exten)
+            #target_leg_swing = -1 * current_angle
+            #target_leg_exten = raibert_controller.nominal_leg_extension + 0.45
+            #target_leg_pose = (target_leg_swing, target_leg_exten)
+            target_leg_pose = (-0.5, 2)
             desired_leg_pose = self._leg_trajectory_generator(phase, swing_start_leg_pose, target_leg_pose)
             leg_pose_set.append(desired_leg_pose)
 
-        return leg_pose_set, target_leg_pose, phase
+        return leg_pose_set
 
 class RaibertStanceLegController(object):
 
@@ -144,28 +146,22 @@ class RaibertStanceLegController(object):
         self._angle_gain = angle_gain
         self._leg_trajectory_generator = leg_trajectory_generator
 
-    def get_action(self, raibert_controller, stance_set, stance_start_leg_pose, phase):
-        print('Stance Controller')
+    def get_action(self, raibert_controller, stance_set, stance_action, phase):
         current_speed = raibert_controller.estimate_base_velocity()
         current_angle = raibert_controller.estimate_base_angle()
 
         leg_pose_set = []
         for i in stance_set:
-            #desired_forward_speed = raibert_controller.behavior_parameters.desired_velocity_x
-            desired_tilting_angle = raibert_controller.behavior_parameters.desired_angle_pitch
-            #desired_height = raibert_controller.behavior_parameters.desired_position_z
-
-            target_leg_swing = -1 * current_angle
-            if phase < 0.5:
-                target_leg_exten = raibert_controller.nominal_leg_extension - 0.45
+            if phase < len(stance_action):
+                desired_leg_pose = stance_action[phase]
+                desired_leg_pose[0] = min(desired_leg_pose[0], 0.3)
             else:
-                target_leg_exten = raibert_controller.nominal_leg_extension + 0.45
-            target_leg_pose = (target_leg_swing, target_leg_exten)
-            desired_leg_pose = self._leg_trajectory_generator(phase, stance_start_leg_pose, target_leg_pose)
-            leg_pose_set.append(desired_leg_pose)
+                desired_leg_pose = (0, 1.57)
 
-        #self.stance_x = x
-        return leg_pose_set, target_leg_pose, phase
+            leg_pose_set.append(desired_leg_pose)
+            print(desired_leg_pose)
+
+        return leg_pose_set
 
 class MinitaurRaibertBoundingController(object):
     """A Raibert style controller for trotting gait."""
@@ -177,22 +173,21 @@ class MinitaurRaibertBoundingController(object):
         self._time = 0
         self._robot = robot
         self._behavior_parameters = behavior_parameters
+        self._swing_leg_controller = swing_leg_controller
+        self._stance_leg_controller = stance_leg_controller
 
         nominal_leg_pose = foot_position_to_leg_pose((0, -self._behavior_parameters.standing_height), 0)
         self._nominal_leg_extension = nominal_leg_pose[1]
-
-        self._swing_leg_controller = swing_leg_controller
-        self._stance_leg_controller = stance_leg_controller
 
         self._phase_id = 1
         print('Start in phase ', self._phase_id)
         self._front = 1
         self._back = 0
+        self._stance_start_front_leg_pose = self._get_average_leg_pose(FRONT_LEG_PAIR)
+        self._swing_start_back_leg_pose = self._get_average_leg_pose(BACK_LEG_PAIR)
 
-        self._front_stance_phase = 0
-        self._front_swing_phase = 0
-        self._back_stance_phase = 0
-        self._back_swing_phase = 0
+        self._front_phase = -1
+        self._back_phase = -1
 
     def update(self, t):
         print('time = ', t)
@@ -205,9 +200,11 @@ class MinitaurRaibertBoundingController(object):
             if self._front == 0 and self._back == 0:
                 print('Front Just Impacted')
                 self._event_id = 1
+                self._front_phase = -1
             elif self._front == 1 and self._back == 1:
                 print('Back Just Lifted')
                 self._event_id = 4
+                self._back_phase = -1
             else:
                 print('Continued')
             self._front = 1
@@ -218,9 +215,11 @@ class MinitaurRaibertBoundingController(object):
             if self._front == 0 and self._back == 0:
                 print('Back Just Impacted')
                 self._event_id = 3
+                self._back_phase = -1
             elif self._front == 1 and self._back == 1:
                 print('Front Just Lifted')
                 self._event_id = 2
+                self._front_phase = -1
             else:
                 print('Continued')
             self._front = 0
@@ -231,9 +230,11 @@ class MinitaurRaibertBoundingController(object):
             if self._front == 1 and self._back == 0:
                 print('Front Just Lifted')
                 self._event_id = 2
+                self._front_phase = -1
             elif self._front == 0 and self._back == 1:
                 print('Back Just Lifted')
                 self._event_id = 4
+                self._back_phase = -1
             else:
                 print('Continued')
             self._front = 0
@@ -244,9 +245,11 @@ class MinitaurRaibertBoundingController(object):
             if self._front == 1 and self._back == 0:
                 print('Back Just Impacted')
                 self._event_id = 3
+                self._back_phase = -1
             elif self._front == 0 and self._back == 1:
                 print('Front Just Impact')
                 self._event_id = 1
+                self._front_phase = -1
             else:
                 print('Continued')
             self._front = 1
@@ -291,70 +294,33 @@ class MinitaurRaibertBoundingController(object):
     def get_swing_leg_action(self, swing_set, swing_start_leg_pose, phase):
         return self._swing_leg_controller.get_action(self, swing_set, swing_start_leg_pose, phase)
 
-    def get_stance_leg_action(self, stance_set, stance_start_leg_pose, phase):
-        return self._stance_leg_controller.get_action(self, stance_set, stance_start_leg_pose, phase)
+    def get_stance_leg_action(self, stance_set, stance_action, phase):
+        return self._stance_leg_controller.get_action(self, stance_set, stance_action, phase)
 
-    def get_action(self):
+    def get_action(self, front_stance_action, back_stance_action):
+        self._front_phase += 1
+        self._back_phase += 1
+        print('front phase = ', self._front_phase)
+        print('back phase = ', self._back_phase)
+
+        # Front Stance
         if self._phase_id == 1:
-            if self._event_id == 1:
-                self._front_stance_phase = 0
-                self._back_swing_phase += 0.006/self._behavior_parameters.swing_duration
-            elif self._event_id == 4:
-                self._front_stance_phase += 1
-                self._back_swing_phase = 0
-            else:
-                self._front_stance_phase += 1
-                self._back_swing_phase += 0.006/self._behavior_parameters.swing_duration
-            #front_leg_pose = front_stance_action[self._front_stance_phase]
-            #back_leg_pose = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_swing_phase)
-
+            front_leg_pose = self.get_stance_leg_action(FRONT_LEG_PAIR, front_stance_action, self._front_phase)
+            back_leg_pose = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
+        # Back Stance
         elif self._phase_id == 2:
-            if self._event_id == 2:
-                self._front_swing_phase = 0
-                self._back_stance_phase += 1
-            elif self._event_id == 3:
-                self._front_swing_phase += 0.006/self._behavior_parameters.swing_duration
-                self._back_stance_phase = 0
-            else:
-                self._front_swing_phase += 0.006/self._behavior_parameters.swing_duration
-                self._back_stance_phase += 1
-            #front_leg_pose = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_swing_phase)
-            #back_leg_pose = back_stance_action[self._back_stance_phase]
-
+            front_leg_pose = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
+            back_leg_pose = self.get_stance_leg_action(BACK_LEG_PAIR, back_stance_action, self._back_phase)
+        # Flight
         elif self._phase_id == 3:
-            if self._event_id == 2:
-                self._front_swing_phase = 0
-                self._back_swing_phase += 0.006/self._behavior_parameters.swing_duration
-            elif self._event_id == 4:
-                self._front_swing_phase += 0.006/self._behavior_parameters.swing_duration
-                self._back_swing_phase = 0
-            else:
-                self._front_swing_phase += 0.006/self._behavior_parameters.swing_duration
-                self._back_swing_phase += 0.006/self._behavior_parameters.swing_duration
-            #front_leg_pose = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_swing_phase)
-            #back_leg_pose = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_swing_phase)
-
+            front_leg_pose = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
+            back_leg_pose = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
+        # Stance
         elif self._phase_id == 4:
-            if self._event_id == 1:
-                self._front_stance_phase = 0
-                self._back_stance_phase += 1
-            elif self._event_id == 3:
-                self._front_stance_phase += 1
-                self._back_stance_phase = 0
-            else:
-                self._front_stance_phase += 1
-                self._back_stance_phase += 1
-            #front_leg_pose = front_stance_action[self._front_stance_phase]
-            #back_leg_pose = back_stance_action[self._back_stance_phase]
-        self._event_id = 0
+            front_leg_pose = self.get_stance_leg_action(FRONT_LEG_PAIR, front_stance_action, self._front_phase)
+            back_leg_pose = self.get_stance_leg_action(BACK_LEG_PAIR, back_stance_action, self._back_phase)
 
         leg_pose = [0] * _NUM_MOTORS
-        print('front stance = ', self._front_stance_phase)
-        print('back stance = ', self._back_stance_phase)
-        print('front swing = ', self._front_swing_phase)
-        print('back swing = ', self._back_swing_phase)
-        return self._front_stance_phase, self._back_stance_phase, self._front_swing_phase, self._back_swing_phase
-        """
         j = 0
         for i in FRONT_LEG_PAIR:
             leg_pose[i] = front_leg_pose[j][0]
@@ -367,8 +333,8 @@ class MinitaurRaibertBoundingController(object):
             leg_pose[i + _NUM_LEGS] = back_leg_pose[j][1]
             j += 1
 
-        return leg_pose_to_motor_angles(leg_pose)
-        """
+        return leg_pose_to_motor_angles(leg_pose), leg_pose
+
 
     @property
     def behavior_parameters(self):
