@@ -37,11 +37,13 @@ for _ in range(1):
         IP_Torso_AngularV = mat1['init_avel']
         IP_Joint_Position = mat1['init_joint']
         IP_Joint_Velocity = mat1['init_jvel']
+
         INIT_POSITION = [IP_Torso_Position[0], IP_Torso_Position[1], IP_Torso_Position[2]]
         INIT_RACK_POSITION = [0, 0, 1]
         INIT_ORIENTATION = [IP_Torso_Rotation[0], IP_Torso_Rotation[1], IP_Torso_Rotation[2], IP_Torso_Rotation[3]]
         INIT_VELOCITY = [IP_Torso_Velocity[0], IP_Torso_Velocity[1], IP_Torso_Velocity[2]]
         INIT_ANGULAR_VELOCITY = [IP_Torso_AngularV[0],IP_Torso_AngularV[1],IP_Torso_AngularV[2]]
+        #INIT_ANGULAR_VELOCITY = [0, 0, 0]
         """
         INIT_POSITION = [0, 0, 0.2]
         INIT_RACK_POSITION = [0, 0, 1]
@@ -90,16 +92,18 @@ for _ in range(1):
         mat4 = sio.loadmat('vel_07_Inputs_to_VS_0006_FrontStance')
         sorted(mat4.keys())
         Inputs_Joint_Position_Front_Stance = mat4['int_front_leg_pose']
+        Inputs_Joint_Velocity_Front_Stance = mat4['int_front_leg_velocity']
 
         mat5 = sio.loadmat('vel_07_Inputs_to_VS_0006_BackStance')
         sorted(mat5.keys())
         Inputs_Joint_Position_Back_Stance = mat5['int_back_leg_pose']
+        Inputs_Joint_Velocity_Back_Stance = mat5['int_back_leg_velocity']
 
         flags = tf.app.flags
         FLAGS = tf.app.flags.FLAGS
 
-        flags.DEFINE_float("motor_kp", 1.0, "The position gain of the motor.")
-        flags.DEFINE_float("motor_kd", 0.015, "The speed gain of the motor.")
+        flags.DEFINE_float("motor_kp", 5.0, "The position gain of the motor.")
+        flags.DEFINE_float("motor_kd", 0.1, "The speed gain of the motor.")
         flags.DEFINE_float("control_latency", 0.02, "The latency between sensor measurement and action"
                            " execution the robot.")
         flags.DEFINE_string("log_path", None, "The directory to write the log file.")
@@ -220,15 +224,22 @@ class MotorModel(object):
       actual_torque: The torque that needs to be applied to the motor.
       observed_torque: The torque observed by the sensor.
     """
+    pwm = [0] * 8
     if self._torque_control_enabled:
-      pwm = motor_commands
+        pwm = motor_commands
     else:
-      if kp is None:
-        kp = np.full(NUM_MOTORS, self._kp)
-      if kd is None:
-        kd = np.full(NUM_MOTORS, self._kd)
-      pwm = kp * (angle_commands - true_motor_angle) + kd * (velocity_commands - true_motor_velocity)
-
+        print('input front swing = ', (angle_commands[1]-angle_commands[0])/2)
+        print('input front exten = ', (angle_commands[1]+angle_commands[0])/2)
+        print('input back swing = ', (angle_commands[3]-angle_commands[2])/2)
+        print('input back exten = ', (angle_commands[3]+angle_commands[2])/2)
+        print('input velocity = ', velocity_commands)
+        for i in range(8):
+            if  velocity_commands[i] == -100:
+                pwm[i] = self._kp * (angle_commands[i] - true_motor_angle[i])
+                #print('P control')
+            else:
+                pwm[i] = self._kp * (angle_commands[i] - true_motor_angle[i]) + self._kd * (velocity_commands[i] - true_motor_velocity[i])
+                #print('PD control')
     pwm = np.clip(pwm, -1.0, 1.0)
     return self._convert_to_torque_from_pwm(pwm, true_motor_velocity)
 
@@ -1724,18 +1735,15 @@ def main(argv):
         tstart = env.minitaur.GetTimeSinceReset()
         for i in num_iter:
             print('iteration number = ', i)
-            input_idx = int(math.fmod(i,102))
-            print('input index = ', input_idx)
-            action = Inputs_Joint_Position[input_idx]
-            action_dot = Inputs_Joint_Velocity[input_idx]
-
             t = env.minitaur.GetTimeSinceReset() - tstart
-            controller.behavior_parameters = minitaur_bounding_controller.BehaviorParameters(desired_velocity_x = velocity(input_idx))
             phase, event = controller.update(t)
 
-            action, leg_pose = controller.get_action(Inputs_Joint_Position_Front_Stance, Inputs_Joint_Position_Back_Stance)
+            action, action_dot = controller.get_action(Inputs_Joint_Position_Front_Stance, Inputs_Joint_Position_Back_Stance, Inputs_Joint_Velocity_Front_Stance, Inputs_Joint_Velocity_Back_Stance)
             q_true = env.step(action, action_dot)
-            print((q_true[1]-q_true[0])/2)
+            #print('front actual swing = ', (q_true[1]-q_true[0])/2)
+            #print('front actual exten = ', (q_true[1]+q_true[0])/2)
+            #print('back actual swing = ', (q_true[3]-q_true[2])/2)
+            #print('back actual exten = ',(q_true[3]+q_true[2])/2)
             front_left_leg_swing_actual.append((q_true[1]-q_true[0])/2)
             front_left_leg_exten_actual.append((q_true[1]+q_true[0])/2)
             front_left_leg_swing_desire.append((action[1]-action[0])/2)

@@ -121,23 +121,17 @@ class RaibertSwingLegController(object):
         self._leg_trajectory_generator = leg_trajectory_generator
 
     def get_action(self, raibert_controller, swing_set, swing_start_leg_pose, phase):
-
-
         current_speed = raibert_controller.estimate_base_velocity()
         current_angle = raibert_controller.estimate_base_angle()
 
         leg_pose_set = []
         for i in swing_set:
-            #desired_tilting_angle = raibert_controller.behavior_parameters.desired_angle_pitch
-
-            #target_leg_swing = -1 * current_angle
-            #target_leg_exten = raibert_controller.nominal_leg_extension + 0.45
-            #target_leg_pose = (target_leg_swing, target_leg_exten)
-            target_leg_pose = (-0.5, 2)
+            target_leg_pose = (0, 1.57)
             desired_leg_pose = self._leg_trajectory_generator(phase, swing_start_leg_pose, target_leg_pose)
             leg_pose_set.append(desired_leg_pose)
+            desired_motor_velocity = [-100, -100]
 
-        return leg_pose_set
+        return leg_pose_set, desired_motor_velocity
 
 class RaibertStanceLegController(object):
 
@@ -146,22 +140,24 @@ class RaibertStanceLegController(object):
         self._angle_gain = angle_gain
         self._leg_trajectory_generator = leg_trajectory_generator
 
-    def get_action(self, raibert_controller, stance_set, stance_action, phase):
+    def get_action(self, raibert_controller, stance_set, stance_action, stance_action_dot, phase):
         current_speed = raibert_controller.estimate_base_velocity()
         current_angle = raibert_controller.estimate_base_angle()
 
         leg_pose_set = []
+
         for i in stance_set:
             if phase < len(stance_action):
                 desired_leg_pose = stance_action[phase]
-                desired_leg_pose[0] = min(desired_leg_pose[0], 0.3)
+                desired_leg_pose[0] = min(desired_leg_pose[0], 0)
+                desired_motor_velocity = stance_action_dot[phase]
             else:
                 desired_leg_pose = (0, 1.57)
+                desired_motor_velocity = [-100, -100]
 
             leg_pose_set.append(desired_leg_pose)
-            print(desired_leg_pose)
 
-        return leg_pose_set
+        return leg_pose_set, desired_motor_velocity
 
 class MinitaurRaibertBoundingController(object):
     """A Raibert style controller for trotting gait."""
@@ -181,6 +177,7 @@ class MinitaurRaibertBoundingController(object):
 
         self._phase_id = 1
         print('Start in phase ', self._phase_id)
+        self._event_id = 1
         self._front = 1
         self._back = 0
         self._stance_start_front_leg_pose = self._get_average_leg_pose(FRONT_LEG_PAIR)
@@ -192,10 +189,10 @@ class MinitaurRaibertBoundingController(object):
     def update(self, t):
         print('time = ', t)
         self._time = t
-        front_left = self._robot._pybullet_client.getClosestPoints(0, 1, 0.01, -1, 19)
-        front_right = self._robot._pybullet_client.getClosestPoints(0, 1, 0.01, -1, 6)
-        back_left = self._robot._pybullet_client.getClosestPoints(0, 1, 0.01, -1, 22)
-        back_right = self._robot._pybullet_client.getClosestPoints(0, 1, 0.01, -1, 9)
+        front_left = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 19)
+        front_right = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 6)
+        back_left = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 22)
+        back_right = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 9)
         if (front_left and front_right) and not (back_left and back_right):
             if self._front == 0 and self._back == 0:
                 print('Front Just Impacted')
@@ -291,13 +288,7 @@ class MinitaurRaibertBoundingController(object):
         leg_pose = np.array(leg_pose)
         return np.mean(leg_pose, axis=0)
 
-    def get_swing_leg_action(self, swing_set, swing_start_leg_pose, phase):
-        return self._swing_leg_controller.get_action(self, swing_set, swing_start_leg_pose, phase)
-
-    def get_stance_leg_action(self, stance_set, stance_action, phase):
-        return self._stance_leg_controller.get_action(self, stance_set, stance_action, phase)
-
-    def get_action(self, front_stance_action, back_stance_action):
+    def get_action(self, front_stance_action, back_stance_action, front_stance_action_dot, back_stance_action_dot):
         self._front_phase += 1
         self._back_phase += 1
         print('front phase = ', self._front_phase)
@@ -305,35 +296,52 @@ class MinitaurRaibertBoundingController(object):
 
         # Front Stance
         if self._phase_id == 1:
-            front_leg_pose = self.get_stance_leg_action(FRONT_LEG_PAIR, front_stance_action, self._front_phase)
-            back_leg_pose = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
+            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, front_stance_action, front_stance_action_dot, self._front_phase)
+            back_leg_pose, back_motor_velocity = self._swing_leg_controller.get_action(self, BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
         # Back Stance
         elif self._phase_id == 2:
-            front_leg_pose = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
-            back_leg_pose = self.get_stance_leg_action(BACK_LEG_PAIR, back_stance_action, self._back_phase)
+            front_leg_pose, front_motor_velocity = self._swing_leg_controller.get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
+            back_leg_pose, back_motor_velocity = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR, back_stance_action, back_stance_action_dot, self._back_phase)
         # Flight
         elif self._phase_id == 3:
-            front_leg_pose = self.get_swing_leg_action(FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
-            back_leg_pose = self.get_swing_leg_action(BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
+            front_leg_pose, front_motor_velocity = self._swing_leg_controller.get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
+            back_leg_pose, back_motor_velocity = self._swing_leg_controller.get_action(self, BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
         # Stance
         elif self._phase_id == 4:
-            front_leg_pose = self.get_stance_leg_action(FRONT_LEG_PAIR, front_stance_action, self._front_phase)
-            back_leg_pose = self.get_stance_leg_action(BACK_LEG_PAIR, back_stance_action, self._back_phase)
+            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, front_stance_action, front_stance_action_dot, self._front_phase)
+            back_leg_pose, back_motor_velocity = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR, back_stance_action, back_stance_action_dot, self._back_phase)
 
         leg_pose = [0] * _NUM_MOTORS
+        motor_velocity = [0] * _NUM_MOTORS
         j = 0
         for i in FRONT_LEG_PAIR:
             leg_pose[i] = front_leg_pose[j][0]
             leg_pose[i + _NUM_LEGS] = front_leg_pose[j][1]
+            if j == 0:
+                motor_velocity[i * 2] = front_motor_velocity[0]
+                motor_velocity[i * 2 + 1] = front_motor_velocity[1]
+            else:
+                motor_velocity[i * 2] = front_motor_velocity[1]
+                motor_velocity[i * 2 + 1] = front_motor_velocity[0]
             j += 1
 
         j = 0
         for i in BACK_LEG_PAIR:
             leg_pose[i] = back_leg_pose[j][0]
             leg_pose[i + _NUM_LEGS] = back_leg_pose[j][1]
+            if j == 0:
+                motor_velocity[i * 2] = back_motor_velocity[0]
+                motor_velocity[i * 2 + 1] = back_motor_velocity[1]
+            else:
+                motor_velocity[i * 2] = back_motor_velocity[1]
+                motor_velocity[i * 2 + 1] = back_motor_velocity[0]
             j += 1
 
-        return leg_pose_to_motor_angles(leg_pose), leg_pose
+        #print('front desire swing = ', leg_pose[0])
+        #print('front desire exten = ', leg_pose[4])
+        #print('back desire swing = ', leg_pose[1])
+        #print('back desire exten = ', leg_pose[5])
+        return leg_pose_to_motor_angles(leg_pose), motor_velocity
 
 
     @property
