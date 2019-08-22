@@ -40,7 +40,8 @@ for _ in range(1):
 
         INIT_POSITION = [IP_Torso_Position[0], IP_Torso_Position[1], IP_Torso_Position[2]]
         INIT_RACK_POSITION = [0, 0, 1]
-        INIT_ORIENTATION = [IP_Torso_Rotation[0], IP_Torso_Rotation[1], IP_Torso_Rotation[2], IP_Torso_Rotation[3]]
+        #INIT_ORIENTATION = [IP_Torso_Rotation[0], IP_Torso_Rotation[1], IP_Torso_Rotation[2], IP_Torso_Rotation[3]]
+        INIT_ORIENTATION = [0, 0.0500, 0, 0.9988]
         INIT_VELOCITY = [IP_Torso_Velocity[0], IP_Torso_Velocity[1], IP_Torso_Velocity[2]]
         INIT_ANGULAR_VELOCITY = [IP_Torso_AngularV[0],IP_Torso_AngularV[1],IP_Torso_AngularV[2]]
         #INIT_ANGULAR_VELOCITY = [0, 0, 0]
@@ -228,11 +229,11 @@ class MotorModel(object):
     if self._torque_control_enabled:
         pwm = motor_commands
     else:
-        print('input front swing = ', (angle_commands[1]-angle_commands[0])/2)
-        print('input front exten = ', (angle_commands[1]+angle_commands[0])/2)
-        print('input back swing = ', (angle_commands[3]-angle_commands[2])/2)
-        print('input back exten = ', (angle_commands[3]+angle_commands[2])/2)
-        print('input velocity = ', velocity_commands)
+        #print('input front swing = ', (angle_commands[1]-angle_commands[0])/2)
+        #print('input front exten = ', (angle_commands[1]+angle_commands[0])/2)
+        #print('input back swing = ', (angle_commands[3]-angle_commands[2])/2)
+        #print('input back exten = ', (angle_commands[3]+angle_commands[2])/2)
+        #print('input velocity = ', velocity_commands)
         for i in range(8):
             if  velocity_commands[i] == -100:
                 pwm[i] = self._kp * (angle_commands[i] - true_motor_angle[i])
@@ -1748,7 +1749,7 @@ def main(argv):
             front_left_leg_exten_actual.append((q_true[1]+q_true[0])/2)
             front_left_leg_swing_desire.append((action[1]-action[0])/2)
             front_left_leg_exten_desire.append((action[1]+action[0])/2)
-            input('-------------Pause-------------')
+            #input('-------------Pause-------------')
 
         plt.figure(1)
         plt.subplot(2,1,1)
