@@ -103,8 +103,8 @@ for _ in range(1):
         flags = tf.app.flags
         FLAGS = tf.app.flags.FLAGS
 
-        flags.DEFINE_float("motor_kp", 5.0, "The position gain of the motor.")
-        flags.DEFINE_float("motor_kd", 0.1, "The speed gain of the motor.")
+        flags.DEFINE_float("motor_kp", 6.0, "The position gain of the motor.")
+        flags.DEFINE_float("motor_kd", 0.5, "The speed gain of the motor.")
         flags.DEFINE_float("control_latency", 0.02, "The latency between sensor measurement and action"
                            " execution the robot.")
         flags.DEFINE_string("log_path", None, "The directory to write the log file.")
@@ -113,9 +113,13 @@ for _ in range(1):
         front_left_leg_exten_actual = []
         front_left_leg_swing_desire = []
         front_left_leg_exten_desire = []
+        back_left_leg_swing_actual = []
+        back_left_leg_exten_actual = []
+        back_left_leg_swing_desire = []
+        back_left_leg_exten_desire = []
 
-        front_phase_all = []
-        back_phase_all = []
+        base_angle_pitch_actual = []
+        base_velocity_x_actual = []
 
 def MapToMinusPiToPi(angles):
     """Maps a list of angles to [-pi, pi].
@@ -1629,12 +1633,16 @@ class MinitaurGymEnv(gym.Env):
       The observation list. observation[0:8] are motor angles. observation[8:16]
       are motor velocities, observation[16:24] are motor torques.
       observation[24:28] is the orientation of the base, in quaternion form.
+      observation[28:31] is the orientation of the base, in rpy form.
+      observation[31:34] is the speed of the base.
     """
     observation = []
     observation.extend(self.minitaur.GetTrueMotorAngles().tolist())
     observation.extend(self.minitaur.GetTrueMotorVelocities().tolist())
     observation.extend(self.minitaur.GetTrueMotorTorques().tolist())
     observation.extend(list(self.minitaur.GetTrueBaseOrientation()))
+    observation.extend(self.minitaur.GetTrueBaseRollPitchYaw().tolist())
+    observation.extend(self.minitaur.GetTrueBaseVelocity().tolist())
 
     self._true_observation = observation
     return self._true_observation
@@ -1732,7 +1740,7 @@ def main(argv):
 
         controller = minitaur_bounding_controller.MinitaurRaibertBoundingController(env.minitaur)
 
-        num_iter = range(1000)
+        num_iter = range(1500)
         tstart = env.minitaur.GetTimeSinceReset()
         for i in num_iter:
             print('iteration number = ', i)
@@ -1745,11 +1753,24 @@ def main(argv):
             #print('front actual exten = ', (q_true[1]+q_true[0])/2)
             #print('back actual swing = ', (q_true[3]-q_true[2])/2)
             #print('back actual exten = ',(q_true[3]+q_true[2])/2)
+            #print('front desire swing = ', (action[1]-action[0])/2)
+            #print('front desire exten = ', (action[1]+action[0])/2)
+            #print('back desire swing = ', (action[3]-action[2])/2)
+            #print('back desire exten = ', (action[3]+action[2])/2)
+
             front_left_leg_swing_actual.append((q_true[1]-q_true[0])/2)
             front_left_leg_exten_actual.append((q_true[1]+q_true[0])/2)
+            back_left_leg_swing_actual.append((q_true[3]-q_true[2])/2)
+            back_left_leg_exten_actual.append((q_true[3]+q_true[2])/2)
+
             front_left_leg_swing_desire.append((action[1]-action[0])/2)
             front_left_leg_exten_desire.append((action[1]+action[0])/2)
-            #input('-------------Pause-------------')
+            back_left_leg_swing_desire.append((action[3]-action[2])/2)
+            back_left_leg_exten_desire.append((action[3]+action[2])/2)
+
+            base_angle_pitch_actual.append(q_true[29])
+            base_velocity_x_actual.append(q_true[31])
+            input('-------------Pause-------------')
 
         plt.figure(1)
         plt.subplot(2,1,1)
@@ -1758,6 +1779,18 @@ def main(argv):
         plt.subplot(2,1,2)
         plt.plot(num_iter, front_left_leg_exten_actual, num_iter, front_left_leg_exten_desire)
         plt.ylabel('Extension')
+        plt.figure(2)
+        plt.subplot(2,1,1)
+        plt.plot(num_iter, back_left_leg_swing_actual, num_iter, back_left_leg_swing_desire)
+        plt.ylabel('Swing')
+        plt.subplot(2,1,2)
+        plt.plot(num_iter, back_left_leg_exten_actual, num_iter, back_left_leg_exten_desire)
+        plt.ylabel('Extension')
+        plt.figure(3)
+        plt.subplot(2,1,1)
+        plt.plot(num_iter, base_angle_pitch_actual)
+        plt.subplot(2,1,2)
+        plt.plot(num_iter, base_velocity_x_actual)
         plt.draw()
     finally:
         env.close()

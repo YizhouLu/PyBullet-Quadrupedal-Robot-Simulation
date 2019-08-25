@@ -126,7 +126,9 @@ class RaibertSwingLegController(object):
 
         leg_pose_set = []
         for i in swing_set:
-            target_leg_pose = (-1 * current_angle, 1.57)
+            target_leg_swing = -1 * current_angle - 0.2
+            target_leg_exten = raibert_controller.nominal_leg_extension
+            target_leg_pose = (target_leg_swing, target_leg_exten)
             desired_leg_pose = self._leg_trajectory_generator(phase, swing_start_leg_pose, target_leg_pose)
             leg_pose_set.append(desired_leg_pose)
             desired_motor_velocity = [-100, -100]
@@ -149,10 +151,10 @@ class RaibertStanceLegController(object):
         for i in stance_set:
             if phase < len(stance_action):
                 desired_leg_pose = stance_action[phase]
-                #desired_leg_pose[0] = min(desired_leg_pose[0], 0)
                 desired_motor_velocity = stance_action_dot[phase]
             else:
-                desired_leg_pose = (0, 1.57)
+                # desired_leg_pose = (0, 1.57)
+                desired_leg_pose = stance_action[-1]
                 desired_motor_velocity = [-100, -100]
 
             leg_pose_set.append(desired_leg_pose)
