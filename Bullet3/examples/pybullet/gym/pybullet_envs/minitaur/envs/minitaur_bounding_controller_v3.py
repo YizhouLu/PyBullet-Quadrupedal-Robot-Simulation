@@ -178,7 +178,7 @@ class MinitaurRaibertBoundingController(object):
         self._nominal_leg_extension = nominal_leg_pose[1]
 
         self._phase_id = 1
-        print('Start in phase ', self._phase_id)
+        #print('Start in phase ', self._phase_id)
         self._event_id = 1
         self._front = 1
         self._back = 0
@@ -189,7 +189,7 @@ class MinitaurRaibertBoundingController(object):
         self._back_phase = -1
 
     def update(self, t):
-        print('time = ', t)
+        #print('time = ', t)
         self._time = t
         front_left = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 19)
         front_right = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 6)
@@ -204,12 +204,12 @@ class MinitaurRaibertBoundingController(object):
                 print('Back Just Lifted')
                 self._event_id = 4
                 self._back_phase = -1
-            else:
-                print('Continued')
+            #else:
+                #print('Continued')
             self._front = 1
             self._back = 0
             phase_id = 1
-            print('Front Stance')
+            #print('Front Stance')
         elif (back_left and back_right) and not (front_left and front_right):
             if self._front == 0 and self._back == 0:
                 print('Back Just Impacted')
@@ -219,12 +219,12 @@ class MinitaurRaibertBoundingController(object):
                 print('Front Just Lifted')
                 self._event_id = 2
                 self._front_phase = -1
-            else:
-                print('Continued')
+            #else:
+                #print('Continued')
             self._front = 0
             self._back = 1
             phase_id = 2
-            print('Back Stance')
+            #print('Back Stance')
         elif not (back_left and back_right) and not (front_left and front_right):
             if self._front == 1 and self._back == 0:
                 print('Front Just Lifted')
@@ -234,12 +234,12 @@ class MinitaurRaibertBoundingController(object):
                 print('Back Just Lifted')
                 self._event_id = 4
                 self._back_phase = -1
-            else:
-                print('Continued')
+            #else:
+                #print('Continued')
             self._front = 0
             self._back = 0
             phase_id = 3
-            print('Flight')
+            #print('Flight')
         elif (front_left and front_right) and (back_left and back_right):
             if self._front == 1 and self._back == 0:
                 print('Back Just Impacted')
@@ -249,12 +249,12 @@ class MinitaurRaibertBoundingController(object):
                 print('Front Just Impact')
                 self._event_id = 1
                 self._front_phase = -1
-            else:
-                print('Continued')
+            #else:
+                #print('Continued')
             self._front = 1
             self._back = 1
             phase_id = 4
-            print('Stance')
+            #print('Stance')
         if phase_id is not self._phase_id:
             self._phase_id = phase_id
             # front impact
@@ -293,8 +293,8 @@ class MinitaurRaibertBoundingController(object):
     def get_action(self, front_stance_action, back_stance_action, front_stance_action_dot, back_stance_action_dot):
         self._front_phase += 1
         self._back_phase += 1
-        print('front phase = ', self._front_phase)
-        print('back phase = ', self._back_phase)
+        #print('front phase = ', self._front_phase)
+        #print('back phase = ', self._back_phase)
 
         # Front Stance
         if self._phase_id == 1:
