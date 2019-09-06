@@ -1740,27 +1740,29 @@ def main(argv):
 
         controller = minitaur_bounding_controller.MinitaurRaibertBoundingController(env.minitaur)
 
-        num_iter = range(2000)
+        num_iter = range(1000)
         tstart = env.minitaur.GetTimeSinceReset()
         for i in num_iter:
-            #print('iteration number = ', i)
+            # print('iteration number = ', i)
             t = env.minitaur.GetTimeSinceReset() - tstart
+            # print('time = ', t)
             phase, event = controller.update(t)
 
             action, action_dot = controller.get_action(Inputs_Joint_Position_Front_Stance, Inputs_Joint_Position_Back_Stance, Inputs_Joint_Velocity_Front_Stance, Inputs_Joint_Velocity_Back_Stance)
             q_true = env.step(action, action_dot)
 
-            """
-            print('front actual swing = ', (q_true[1]-q_true[0])/2)
-            print('front actual exten = ', (q_true[1]+q_true[0])/2)
-            print('back actual swing = ', (q_true[3]-q_true[2])/2)
-            print('back actual exten = ',(q_true[3]+q_true[2])/2)
-            print('front desire swing = ', (action[1]-action[0])/2)
-            print('front desire exten = ', (action[1]+action[0])/2)
-            print('back desire swing = ', (action[3]-action[2])/2)
-            print('back desire exten = ', (action[3]+action[2])/2)
+
+            # print('front actual swing = ', (q_true[1]-q_true[0])/2)
+            # print('front actual exten = ', (q_true[1]+q_true[0])/2)
+            # print('back actual swing = ', (q_true[3]-q_true[2])/2)
+            # print('back actual exten = ',(q_true[3]+q_true[2])/2)
+            # print('front desire swing = ', (action[1]-action[0])/2)
+            # print('front desire exten = ', (action[1]+action[0])/2)
+            # print('back desire swing = ', (action[3]-action[2])/2)
+            # print('back desire exten = ', (action[3]+action[2])/2)
             input('-------------Pause-------------')
-            """
+
+
 
             front_left_leg_swing_actual.append((q_true[1]-q_true[0])/2)
             front_left_leg_exten_actual.append((q_true[1]+q_true[0])/2)

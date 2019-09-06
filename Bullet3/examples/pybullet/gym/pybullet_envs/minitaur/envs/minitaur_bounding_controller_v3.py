@@ -126,7 +126,13 @@ class RaibertSwingLegController(object):
 
         leg_pose_set = []
         for i in swing_set:
-            target_leg_swing = -1 * current_angle - 0.2
+            if swing_set[0] == 0:
+                # target_leg_swing = -0.2101 # control relative swing angle
+                target_leg_swing = -1 * current_angle - 0.0331 # control absolute swing angle
+            else:
+                # target_leg_swing = -0.4363 # control relative swing angle
+                target_leg_swing = -1 * current_angle - 0.35 # control absolute swing angle
+
             target_leg_exten = raibert_controller.nominal_leg_extension
             target_leg_pose = (target_leg_swing, target_leg_exten)
             desired_leg_pose = self._leg_trajectory_generator(phase, swing_start_leg_pose, target_leg_pose)
@@ -149,8 +155,11 @@ class RaibertStanceLegController(object):
         leg_pose_set = []
 
         for i in stance_set:
+            print(phase)
             if phase < len(stance_action):
-                desired_leg_pose = stance_action[phase]
+                desired_leg_swing = stance_action[phase][0]
+                desired_leg_exten = stance_action[phase][2]
+                desired_leg_pose = (desired_leg_swing, desired_leg_exten)
                 desired_motor_velocity = stance_action_dot[phase]
             else:
                 # desired_leg_pose = (0, 1.57)
@@ -163,7 +172,6 @@ class RaibertStanceLegController(object):
 
 class MinitaurRaibertBoundingController(object):
     """A Raibert style controller for trotting gait."""
-
     def __init__(self, robot,
         behavior_parameters = BehaviorParameters(),
         swing_leg_controller = RaibertSwingLegController(),
@@ -293,8 +301,6 @@ class MinitaurRaibertBoundingController(object):
     def get_action(self, front_stance_action, back_stance_action, front_stance_action_dot, back_stance_action_dot):
         self._front_phase += 1
         self._back_phase += 1
-        #print('front phase = ', self._front_phase)
-        #print('back phase = ', self._back_phase)
 
         # Front Stance
         if self._phase_id == 1:
