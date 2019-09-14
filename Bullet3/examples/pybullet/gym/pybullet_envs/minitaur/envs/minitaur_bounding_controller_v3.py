@@ -127,10 +127,10 @@ class RaibertSwingLegController(object):
         leg_pose_set = []
         for i in swing_set:
             if swing_set[0] == 0:
-                # target_leg_swing = -0.2101 # control relative swing angle
+                #target_leg_swing = -0.2101 # control relative swing angle
                 target_leg_swing = -1 * current_angle - 0.0331 # control absolute swing angle
             else:
-                # target_leg_swing = -0.4363 # control relative swing angle
+                #target_leg_swing = -0.4363 # control relative swing angle
                 target_leg_swing = -1 * current_angle - 0.35 # control absolute swing angle
 
             target_leg_exten = raibert_controller.nominal_leg_extension
@@ -156,8 +156,8 @@ class RaibertStanceLegController(object):
 
         for i in stance_set:
             if phase < len(stance_action):
-                #desired_leg_swing = stance_action[phase][0] # relative swing angle
-                desired_leg_swing = stance_action[phase][1] - current_angle
+                desired_leg_swing = stance_action[phase][0] # relative swing angle
+                #desired_leg_swing = stance_action[phase][1] - current_angle
                 desired_leg_exten = stance_action[phase][2]
                 desired_leg_pose = (desired_leg_swing, desired_leg_exten)
                 desired_motor_velocity = stance_action_dot[phase]

@@ -2,7 +2,7 @@ import scipy.io as sio
 import numpy as np
 import math
 Obj = sio.loadmat('GaitLibrary_PyBullet2.mat')['GaitLibrary']
-Velocity    = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+reference_velocity = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 FrontStance = Obj[0][0][1][0]
 BackStance  = Obj[0][0][2][0]
 FrontStance_LegPose = FrontStance[0][0]         # 6 velocities by 3 poses by 21 nodes
@@ -30,9 +30,9 @@ def interp3D(current_velocity, reference_velocity, data_3D):
     data_2D = lower_percentage * data_3D[lower_index] + (1 - lower_percentage) * data_3D[upper_index]
     return data_2D
 
-desired_LegPose = interp3D(0.49, Velocity, FrontStance_LegPose) # 3 pose by 21 nodes
-desired_MotorV = interp3D(0.49, Velocity, FrontStance_MotorV)   # 3 pose by 21 nodes
-desired_Time = interp2D(0.49, Velocity, FrontStance_Time)       # 21 nodes
+desired_LegPose = interp3D(0.49, reference_velocity, FrontStance_LegPose) # 3 poses by 21 nodes
+desired_MotorV = interp3D(0.49, reference_velocity, FrontStance_MotorV)   # 2 motors by 21 nodes
+desired_Time = interp2D(0.49, reference_velocity, FrontStance_Time)       # 21 nodes
 
 desired_extension = np.reshape(desired_LegPose[2], len(desired_LegPose[2]))
 desired_t = np.reshape(desired_Time, len(desired_Time[0]))

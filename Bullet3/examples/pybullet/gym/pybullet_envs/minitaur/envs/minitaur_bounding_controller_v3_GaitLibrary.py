@@ -148,22 +148,55 @@ class RaibertStanceLegController(object):
         self._angle_gain = angle_gain
         self._leg_trajectory_generator = leg_trajectory_generator
 
-    def get_action(self, raibert_controller, stance_set, stance_action, stance_action_dot, phase):
-        current_speed = raibert_controller.estimate_base_velocity()
+    def clamp(self, current_velocity, reference_velocity):
+        lower_velocity = math.floor(current_velocity * 10) / 10
+        upper_velocity = math.ceil(current_velocity * 10) / 10
+        lower_percentage = 1 - (current_velocity - lower_velocity) / 0.1
+        lower_index = reference_velocity.index(lower_velocity)
+        upper_index = reference_velocity.index(upper_velocity)
+        return lower_velocity, upper_velocity, lower_percentage, lower_index, upper_index
+
+    def interp2D(self, current_velocity, reference_velocity, data_2D):
+        lower_velocity, upper_velocity, lower_percentage, lower_index, upper_index = self.clamp(current_velocity, reference_velocity)
+        data_1D = lower_percentage * data_2D[lower_index] + (1 - lower_percentage) * data_2D[upper_index]
+        return data_1D
+
+    def interp3D(self, current_velocity, reference_velocity, data_3D):
+        lower_velocity, upper_velocity, lower_percentage, lower_index, upper_index = self.clamp(current_velocity, reference_velocity)
+        data_2D = lower_percentage * data_3D[lower_index] + (1 - lower_percentage) * data_3D[upper_index]
+        return data_2D
+
+    def get_action(self, raibert_controller, stance_set, reference_velocity, stance_action, stance_action_dot, phase, stance_time):
+        #current_speed = raibert_controller.estimate_base_velocity()
+        print(raibert_controller.estimate_base_velocity())
+        current_speed = 0.5
         current_angle = raibert_controller.estimate_base_angle()
 
-        leg_pose_set = []
+        # calculate the correct layer of data
+        LegPose = self.interp3D(current_speed, reference_velocity, stance_action)      # 3 poses by 21 nodes
+        MotorV = self.interp3D(current_speed, reference_velocity, stance_action_dot)   # 2 motors by 21 nodes
+        Time = self.interp2D(current_speed, reference_velocity, stance_time)           # 21 nodes
 
+        # decompose and reshape the desire pose (swing, exten, motor velocities)
+        swing = np.reshape(LegPose[0], len(LegPose[0])) # 21 nodes
+        exten = np.reshape(LegPose[2], len(LegPose[2])) # 21 nodes
+        motv1 = np.reshape(MotorV[0], len(MotorV[0]))   # 21 nodes
+        motv2 = np.reshape(MotorV[1], len(MotorV[1]))   # 21 nodes
+        tspan = np.reshape(Time, len(Time[0]))          # 21 nodes
+
+        leg_pose_set = []
         for i in stance_set:
-            if phase < len(stance_action):
-                #desired_leg_swing = stance_action[phase][0] # relative swing angle
-                desired_leg_swing = stance_action[phase][1] - current_angle
-                desired_leg_exten = stance_action[phase][2]
+            if phase * 0.006 < tspan[-1]:
+                desired_leg_swing = np.interp(phase * 0.006, tspan, swing)
+                desired_leg_exten = np.interp(phase * 0.006, tspan, exten)
+                desired_leg_motv1 = np.interp(phase * 0.006, tspan, motv1)
+                desired_leg_motv2 = np.interp(phase * 0.006, tspan, motv2)
                 desired_leg_pose = (desired_leg_swing, desired_leg_exten)
-                desired_motor_velocity = stance_action_dot[phase]
+                desired_motor_velocity = (desired_leg_motv1, desired_leg_motv2)
+                print(desired_leg_pose)
+                print(desired_motor_velocity)
             else:
-                # desired_leg_pose = (0, 1.57)
-                desired_leg_pose = stance_action[-1]
+                desired_leg_pose = (swing[-1], exten[-1])
                 desired_motor_velocity = [-100, -100]
 
             leg_pose_set.append(desired_leg_pose)
@@ -298,26 +331,33 @@ class MinitaurRaibertBoundingController(object):
         leg_pose = np.array(leg_pose)
         return np.mean(leg_pose, axis=0)
 
-    def get_action(self, front_stance_action, back_stance_action, front_stance_action_dot, back_stance_action_dot):
+    def get_action(self, reference_velocity, FrontStance, BackStance):
+        FrontStance_LegPose = FrontStance[0][0]         # 6 velocities by 3 poses by 21 nodes
+        FrontStance_MotorV = FrontStance[0][1]      # 6 velocities by 2 motors by 21 nodes
+        FrontStance_Time = FrontStance[0][2]            # 6 velocities by 21 nodes
+        BackStance_LegPose = BackStance[0][0]           # 6 velocities by 3 poses by 21 nodes
+        BackStance_MotorV = BackStance[0][1]        # 6 velocities by 2 motors by 21 nodes
+        BackStance_Time = BackStance[0][2]              # 6 velocities by 21 nodes
+
         self._front_phase += 1
         self._back_phase += 1
 
         # Front Stance
         if self._phase_id == 1:
-            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, front_stance_action, front_stance_action_dot, self._front_phase)
+            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, reference_velocity, FrontStance_LegPose, FrontStance_MotorV, self._front_phase, FrontStance_Time)
             back_leg_pose, back_motor_velocity = self._swing_leg_controller.get_action(self, BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
         # Back Stance
         elif self._phase_id == 2:
             front_leg_pose, front_motor_velocity = self._swing_leg_controller.get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
-            back_leg_pose, back_motor_velocity = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR, back_stance_action, back_stance_action_dot, self._back_phase)
+            back_leg_pose, back_motor_velocity = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR, reference_velocity, BackStance_LegPose, BackStance_MotorV, self._back_phase, BackStance_Time)
         # Flight
         elif self._phase_id == 3:
             front_leg_pose, front_motor_velocity = self._swing_leg_controller.get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
             back_leg_pose, back_motor_velocity = self._swing_leg_controller.get_action(self, BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
         # Stance
         elif self._phase_id == 4:
-            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, front_stance_action, front_stance_action_dot, self._front_phase)
-            back_leg_pose, back_motor_velocity = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR, back_stance_action, back_stance_action_dot, self._back_phase)
+            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, reference_velocity, FrontStance_LegPose, FrontStance_MotorV, self._front_phase, FrontStance_Time)
+            back_leg_pose, back_motor_velocity = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR, reference_velocity, BackStance_LegPose, BackStance_MotorV, self._back_phase, BackStance_Time)
 
         leg_pose = [0] * _NUM_MOTORS
         motor_velocity = [0] * _NUM_MOTORS

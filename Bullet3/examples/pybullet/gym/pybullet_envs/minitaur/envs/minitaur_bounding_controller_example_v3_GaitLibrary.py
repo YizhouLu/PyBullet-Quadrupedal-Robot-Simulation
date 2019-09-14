@@ -9,7 +9,7 @@ for _ in range(1):
     os.sys.path.insert(0, parentdir)
 
     import tensorflow as tf, math, time, numpy as np, collections, copy, re, gym, pybullet
-    from pybullet_envs.minitaur.envs import minitaur_bounding_controller_v3 as minitaur_bounding_controller
+    from pybullet_envs.minitaur.envs import minitaur_bounding_controller_v3_GaitLibrary as minitaur_bounding_controller
     from gym import spaces
     from gym.utils import seeding
     from pybullet_envs.minitaur.envs import bullet_client as BC, minitaur_logging as ML, minitaur_logging_pb2 as ML2
@@ -99,6 +99,11 @@ for _ in range(1):
         sorted(mat5.keys())
         Inputs_Joint_Position_Back_Stance = mat5['int_back_leg_pose']
         Inputs_Joint_Velocity_Back_Stance = mat5['int_back_leg_velocity']
+
+        GL = sio.loadmat('GaitLibrary_PyBullet2.mat')['GaitLibrary']
+        Reference_Velocity = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        FrontStance = GL[0][0][1][0]
+        BackStance  = GL[0][0][2][0]
 
         flags = tf.app.flags
         FLAGS = tf.app.flags.FLAGS
@@ -1748,7 +1753,7 @@ def main(argv):
             # print('time = ', t)
             phase, event = controller.update(t)
 
-            action, action_dot = controller.get_action(Inputs_Joint_Position_Front_Stance, Inputs_Joint_Position_Back_Stance, Inputs_Joint_Velocity_Front_Stance, Inputs_Joint_Velocity_Back_Stance)
+            action, action_dot = controller.get_action(Reference_Velocity, FrontStance, BackStance)
             q_true = env.step(action, action_dot)
 
 
@@ -1760,7 +1765,7 @@ def main(argv):
             # print('front desire exten = ', (action[1]+action[0])/2)
             # print('back desire swing = ', (action[3]-action[2])/2)
             # print('back desire exten = ', (action[3]+action[2])/2)
-            # input('-------------Pause-------------')
+            input('-------------Pause-------------')
 
 
 
