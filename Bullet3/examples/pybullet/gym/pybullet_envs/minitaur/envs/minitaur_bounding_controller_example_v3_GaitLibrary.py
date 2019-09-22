@@ -29,7 +29,7 @@ for _ in range(1):
         NUM_MOTORS = 8
     # MINITAUR
     for _ in range(1):
-        mat1 = sio.loadmat('vel_07_InitialCondition_to_VS_0006.mat')
+        mat1 = sio.loadmat('vel_03_InitialCondition_to_VS_0006.mat')
         sorted(mat1.keys())
         IP_Torso_Position = mat1['init_pos']
         IP_Torso_Rotation = mat1['init_rot']
@@ -79,6 +79,7 @@ for _ in range(1):
         NUM_SIMULATION_ITERATION_STEPS = 300
     # MAIN
     for _ in range(1):
+        """
         mat2 = sio.loadmat('vel_07_States_to_VS_0006.mat')
         sorted(mat2.keys())
         base_velocity_x_desire = mat2['base_velocity_x']
@@ -99,11 +100,12 @@ for _ in range(1):
         sorted(mat5.keys())
         Inputs_Joint_Position_Back_Stance = mat5['int_back_leg_pose']
         Inputs_Joint_Velocity_Back_Stance = mat5['int_back_leg_velocity']
+        """
 
         GL = sio.loadmat('GaitLibrary_PyBullet2.mat')['GaitLibrary']
-        Reference_Velocity = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-        FrontStance = GL[0][0][1][0]
-        BackStance  = GL[0][0][2][0]
+        Reference_Velocity = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+        FrontStance_Data = GL[0][0][1][0]
+        BackStance_Data  = GL[0][0][2][0]
 
         flags = tf.app.flags
         FLAGS = tf.app.flags.FLAGS
@@ -149,10 +151,10 @@ def convert_to_list(obj):
         return obj
     except TypeError:
         return [obj]
-
+"""
 def velocity(iter):
     return base_velocity_x_desire[iter]
-
+"""
 class MotorModel(object):
   """The accurate motor model, which is based on the physics of DC motors.
 
@@ -1745,17 +1747,22 @@ def main(argv):
 
         controller = minitaur_bounding_controller.MinitaurRaibertBoundingController(env.minitaur)
 
-        num_iter = range(1000)
+        num_iter = range(2000)
         tstart = env.minitaur.GetTimeSinceReset()
         for i in num_iter:
-            # print('iteration number = ', i)
             t = env.minitaur.GetTimeSinceReset() - tstart
-            # print('time = ', t)
+            # update current phase (does not depend on t)
             phase, event = controller.update(t)
-
-            action, action_dot = controller.get_action(Reference_Velocity, FrontStance, BackStance)
+            # get speed from last stride
+            speed = controller.get_speed()
+            # get desired layer of leg pose and motor velocity based on current speed
+            front_time, front_leg_pose, front_motor_velocity, back_time, back_leg_pose, back_motor_velocity = controller.get_input(speed, Reference_Velocity, FrontStance_Data, BackStance_Data)
+            # get desired motor position and motor velocity based on internal phasing variable
+            action, action_dot = controller.get_action(front_time, front_leg_pose, front_motor_velocity, back_time, back_leg_pose, back_motor_velocity)
+            # applied desired motor position and motor velocity
+            #action = [1.57] * 8
+            #action_dot = [0] * 8
             q_true = env.step(action, action_dot)
-
 
             # print('front actual swing = ', (q_true[1]-q_true[0])/2)
             # print('front actual exten = ', (q_true[1]+q_true[0])/2)
@@ -1765,9 +1772,7 @@ def main(argv):
             # print('front desire exten = ', (action[1]+action[0])/2)
             # print('back desire swing = ', (action[3]-action[2])/2)
             # print('back desire exten = ', (action[3]+action[2])/2)
-            input('-------------Pause-------------')
-
-
+            # input('-------------Pause-------------')
 
             front_left_leg_swing_actual.append((q_true[1]-q_true[0])/2)
             front_left_leg_exten_actual.append((q_true[1]+q_true[0])/2)

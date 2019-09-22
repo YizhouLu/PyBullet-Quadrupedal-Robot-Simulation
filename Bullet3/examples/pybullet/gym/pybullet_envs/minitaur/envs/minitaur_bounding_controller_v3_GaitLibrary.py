@@ -120,26 +120,24 @@ class RaibertSwingLegController(object):
         self._speed_gain = speed_gain
         self._leg_trajectory_generator = leg_trajectory_generator
 
-    def get_action(self, raibert_controller, swing_set, swing_start_leg_pose, phase):
+    def get_action(self, raibert_controller, swing_set, swing_start_leg_pose, normalized_phase):
         current_speed = raibert_controller.estimate_base_velocity()
         current_angle = raibert_controller.estimate_base_angle()
 
-        leg_pose_set = []
-        for i in swing_set:
-            if swing_set[0] == 0:
-                # target_leg_swing = -0.2101 # control relative swing angle
-                target_leg_swing = -1 * current_angle - 0.0331 # control absolute swing angle
-            else:
-                # target_leg_swing = -0.4363 # control relative swing angle
-                target_leg_swing = -1 * current_angle - 0.35 # control absolute swing angle
-
+        if swing_set[0] == 0:   # if front leg in swing
+            target_leg_swing = -1 * current_angle
             target_leg_exten = raibert_controller.nominal_leg_extension
-            target_leg_pose = (target_leg_swing, target_leg_exten)
-            desired_leg_pose = self._leg_trajectory_generator(phase, swing_start_leg_pose, target_leg_pose)
-            leg_pose_set.append(desired_leg_pose)
-            desired_motor_velocity = [-100, -100]
+        else:                   # if back leg in swing
+            target_leg_swing = -1 * current_angle - 0.05
+            target_leg_exten = raibert_controller.nominal_leg_extension
 
-        return leg_pose_set, desired_motor_velocity
+        target_leg_pose = (target_leg_swing, target_leg_exten)
+        print('swing set = ', swing_set[0], 'normalized_phase = ', normalized_phase)
+        desired_leg_pose = self._leg_trajectory_generator(normalized_phase, swing_start_leg_pose, target_leg_pose)
+
+        desired_motor_velocity = [-100, -100] # turn off D controller
+
+        return desired_leg_pose, desired_motor_velocity
 
 class RaibertStanceLegController(object):
 
@@ -148,60 +146,27 @@ class RaibertStanceLegController(object):
         self._angle_gain = angle_gain
         self._leg_trajectory_generator = leg_trajectory_generator
 
-    def clamp(self, current_velocity, reference_velocity):
-        lower_velocity = math.floor(current_velocity * 10) / 10
-        upper_velocity = math.ceil(current_velocity * 10) / 10
-        lower_percentage = 1 - (current_velocity - lower_velocity) / 0.1
-        lower_index = reference_velocity.index(lower_velocity)
-        upper_index = reference_velocity.index(upper_velocity)
-        return lower_velocity, upper_velocity, lower_percentage, lower_index, upper_index
+    def get_action(self, raibert_controller, stance_set, stance_time, stance_action, stance_action_dot, phase):
+        # decompose and reshape the desire pose (time, swing, exten, motor velocities)
+        tspan = np.reshape(stance_time,          len(stance_time[0]))           # 21 nodes
+        swing = np.reshape(stance_action[0],     len(stance_action[0]))         # 21 nodes
+        exten = np.reshape(stance_action[2],     len(stance_action[2]))         # 21 nodes
+        motv1 = np.reshape(stance_action_dot[0], len(stance_action_dot[0]))     # 21 nodes
+        motv2 = np.reshape(stance_action_dot[1], len(stance_action_dot[1]))     # 21 nodes
 
-    def interp2D(self, current_velocity, reference_velocity, data_2D):
-        lower_velocity, upper_velocity, lower_percentage, lower_index, upper_index = self.clamp(current_velocity, reference_velocity)
-        data_1D = lower_percentage * data_2D[lower_index] + (1 - lower_percentage) * data_2D[upper_index]
-        return data_1D
+        if phase * 0.006 < tspan[-1]: # read stance leg pose data and motor velocity data regardless of which stance leg is action
+            # instead of reading the data directly, need to interpolate the data based on time step in simulation
+            desired_leg_swing = np.interp(phase * 0.006, tspan, swing)
+            desired_leg_exten = np.interp(phase * 0.006, tspan, exten)
+            desired_leg_pose = (desired_leg_swing, desired_leg_exten)
+            desired_leg_motv1 = np.interp(phase * 0.006, tspan, motv1)
+            desired_leg_motv2 = np.interp(phase * 0.006, tspan, motv2)
+            desired_motor_velocity = (desired_leg_motv1, desired_leg_motv2)
+        else: # runs out of data
+            desired_leg_pose = (swing[-1], exten[-1])
+            desired_motor_velocity = [-100, -100]
 
-    def interp3D(self, current_velocity, reference_velocity, data_3D):
-        lower_velocity, upper_velocity, lower_percentage, lower_index, upper_index = self.clamp(current_velocity, reference_velocity)
-        data_2D = lower_percentage * data_3D[lower_index] + (1 - lower_percentage) * data_3D[upper_index]
-        return data_2D
-
-    def get_action(self, raibert_controller, stance_set, reference_velocity, stance_action, stance_action_dot, phase, stance_time):
-        #current_speed = raibert_controller.estimate_base_velocity()
-        print(raibert_controller.estimate_base_velocity())
-        current_speed = 0.5
-        current_angle = raibert_controller.estimate_base_angle()
-
-        # calculate the correct layer of data
-        LegPose = self.interp3D(current_speed, reference_velocity, stance_action)      # 3 poses by 21 nodes
-        MotorV = self.interp3D(current_speed, reference_velocity, stance_action_dot)   # 2 motors by 21 nodes
-        Time = self.interp2D(current_speed, reference_velocity, stance_time)           # 21 nodes
-
-        # decompose and reshape the desire pose (swing, exten, motor velocities)
-        swing = np.reshape(LegPose[0], len(LegPose[0])) # 21 nodes
-        exten = np.reshape(LegPose[2], len(LegPose[2])) # 21 nodes
-        motv1 = np.reshape(MotorV[0], len(MotorV[0]))   # 21 nodes
-        motv2 = np.reshape(MotorV[1], len(MotorV[1]))   # 21 nodes
-        tspan = np.reshape(Time, len(Time[0]))          # 21 nodes
-
-        leg_pose_set = []
-        for i in stance_set:
-            if phase * 0.006 < tspan[-1]:
-                desired_leg_swing = np.interp(phase * 0.006, tspan, swing)
-                desired_leg_exten = np.interp(phase * 0.006, tspan, exten)
-                desired_leg_motv1 = np.interp(phase * 0.006, tspan, motv1)
-                desired_leg_motv2 = np.interp(phase * 0.006, tspan, motv2)
-                desired_leg_pose = (desired_leg_swing, desired_leg_exten)
-                desired_motor_velocity = (desired_leg_motv1, desired_leg_motv2)
-                print(desired_leg_pose)
-                print(desired_motor_velocity)
-            else:
-                desired_leg_pose = (swing[-1], exten[-1])
-                desired_motor_velocity = [-100, -100]
-
-            leg_pose_set.append(desired_leg_pose)
-
-        return leg_pose_set, desired_motor_velocity
+        return desired_leg_pose, desired_motor_velocity
 
 class MinitaurRaibertBoundingController(object):
     """A Raibert style controller for trotting gait."""
@@ -219,7 +184,6 @@ class MinitaurRaibertBoundingController(object):
         self._nominal_leg_extension = nominal_leg_pose[1]
 
         self._phase_id = 1
-        #print('Start in phase ', self._phase_id)
         self._event_id = 1
         self._front = 1
         self._back = 0
@@ -230,7 +194,6 @@ class MinitaurRaibertBoundingController(object):
         self._back_phase = -1
 
     def update(self, t):
-        #print('time = ', t)
         self._time = t
         front_left = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 19)
         front_right = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 6)
@@ -245,12 +208,9 @@ class MinitaurRaibertBoundingController(object):
                 print('Back Just Lifted')
                 self._event_id = 4
                 self._back_phase = -1
-            #else:
-                #print('Continued')
             self._front = 1
             self._back = 0
             phase_id = 1
-            #print('Front Stance')
         elif (back_left and back_right) and not (front_left and front_right):
             if self._front == 0 and self._back == 0:
                 print('Back Just Impacted')
@@ -260,12 +220,9 @@ class MinitaurRaibertBoundingController(object):
                 print('Front Just Lifted')
                 self._event_id = 2
                 self._front_phase = -1
-            #else:
-                #print('Continued')
             self._front = 0
             self._back = 1
             phase_id = 2
-            #print('Back Stance')
         elif not (back_left and back_right) and not (front_left and front_right):
             if self._front == 1 and self._back == 0:
                 print('Front Just Lifted')
@@ -275,12 +232,9 @@ class MinitaurRaibertBoundingController(object):
                 print('Back Just Lifted')
                 self._event_id = 4
                 self._back_phase = -1
-            #else:
-                #print('Continued')
             self._front = 0
             self._back = 0
             phase_id = 3
-            #print('Flight')
         elif (front_left and front_right) and (back_left and back_right):
             if self._front == 1 and self._back == 0:
                 print('Back Just Impacted')
@@ -290,12 +244,9 @@ class MinitaurRaibertBoundingController(object):
                 print('Front Just Impact')
                 self._event_id = 1
                 self._front_phase = -1
-            #else:
-                #print('Continued')
             self._front = 1
             self._back = 1
             phase_id = 4
-            #print('Stance')
         if phase_id is not self._phase_id:
             self._phase_id = phase_id
             # front impact
@@ -320,6 +271,9 @@ class MinitaurRaibertBoundingController(object):
         angle = self._robot.GetTrueBaseRollPitchYaw()
         return angle[1]
 
+    def get_speed(self):
+        return 0.42
+
     def _get_average_leg_pose(self, leg_indices):
         """Get the average leg pose."""
         current_leg_pose = motor_angles_to_leg_pose(self._robot.GetMotorAngles())
@@ -331,65 +285,94 @@ class MinitaurRaibertBoundingController(object):
         leg_pose = np.array(leg_pose)
         return np.mean(leg_pose, axis=0)
 
-    def get_action(self, reference_velocity, FrontStance, BackStance):
-        FrontStance_LegPose = FrontStance[0][0]         # 6 velocities by 3 poses by 21 nodes
-        FrontStance_MotorV = FrontStance[0][1]      # 6 velocities by 2 motors by 21 nodes
-        FrontStance_Time = FrontStance[0][2]            # 6 velocities by 21 nodes
-        BackStance_LegPose = BackStance[0][0]           # 6 velocities by 3 poses by 21 nodes
-        BackStance_MotorV = BackStance[0][1]        # 6 velocities by 2 motors by 21 nodes
-        BackStance_Time = BackStance[0][2]              # 6 velocities by 21 nodes
+    def get_input(self, stride_velocity, Reference_Velocity, FrontStance_Data, BackStance_Data):
+        FrontStance_Time    = FrontStance_Data[0][0]         # 6 velocities by 21 nodes
+        FrontStance_LegPose = FrontStance_Data[0][1]         # 6 velocities by 3 poses by 21 nodes
+        FrontStance_MotorV  = FrontStance_Data[0][2]         # 6 velocities by 2 motors by 21 nodes
+        BackStance_Time     = BackStance_Data[0][0]          # 6 velocities by 21 nodes
+        BackStance_LegPose  = BackStance_Data[0][1]          # 6 velocities by 3 poses by 21 nodes
+        BackStance_MotorV   = BackStance_Data[0][2]          # 6 velocities by 2 motors by 21 nodes
 
+        # calculate the correct layer of data
+        front_stance_time       = self.interp2D(stride_velocity, Reference_Velocity, FrontStance_Time)            # 21 nodes
+        front_stance_action     = self.interp3D(stride_velocity, Reference_Velocity, FrontStance_LegPose)         # 3 poses by 21 nodes
+        front_stance_action_dot = self.interp3D(stride_velocity, Reference_Velocity, FrontStance_MotorV)          # 2 motors by 21 nodes
+
+        back_stance_time        = self.interp2D(stride_velocity, Reference_Velocity, BackStance_Time)             # 21 nodes
+        back_stance_action      = self.interp3D(stride_velocity, Reference_Velocity, BackStance_LegPose)          # 3 poses by 21 nodes
+        back_stance_action_dot  = self.interp3D(stride_velocity, Reference_Velocity, BackStance_MotorV)           # 2 motors by 21 nodes
+
+        return front_stance_time, front_stance_action, front_stance_action_dot, back_stance_time, back_stance_action, back_stance_action_dot
+
+    def get_action(self, front_stance_time, front_stance_action, front_stance_action_dot, back_stance_time,  back_stance_action,  back_stance_action_dot):
         self._front_phase += 1
-        self._back_phase += 1
+        self._back_phase  += 1
 
         # Front Stance
         if self._phase_id == 1:
-            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, reference_velocity, FrontStance_LegPose, FrontStance_MotorV, self._front_phase, FrontStance_Time)
-            back_leg_pose, back_motor_velocity = self._swing_leg_controller.get_action(self, BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
+            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, front_stance_time, front_stance_action, front_stance_action_dot, self._front_phase)
+            back_leg_pose,  back_motor_velocity  = self._swing_leg_controller. get_action(self, BACK_LEG_PAIR,  self._swing_start_back_leg_pose,  self._back_phase  / 68)
         # Back Stance
         elif self._phase_id == 2:
-            front_leg_pose, front_motor_velocity = self._swing_leg_controller.get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
-            back_leg_pose, back_motor_velocity = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR, reference_velocity, BackStance_LegPose, BackStance_MotorV, self._back_phase, BackStance_Time)
+            front_leg_pose, front_motor_velocity = self._swing_leg_controller. get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
+            back_leg_pose,  back_motor_velocity  = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR,  back_stance_time,  back_stance_action,  back_stance_action_dot,  self._back_phase)
         # Flight
         elif self._phase_id == 3:
-            front_leg_pose, front_motor_velocity = self._swing_leg_controller.get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
-            back_leg_pose, back_motor_velocity = self._swing_leg_controller.get_action(self, BACK_LEG_PAIR, self._swing_start_back_leg_pose, self._back_phase / 68)
+            front_leg_pose, front_motor_velocity = self._swing_leg_controller. get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
+            back_leg_pose,  back_motor_velocity  = self._swing_leg_controller. get_action(self, BACK_LEG_PAIR,  self._swing_start_back_leg_pose,  self._back_phase  / 68)
         # Stance
         elif self._phase_id == 4:
-            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, reference_velocity, FrontStance_LegPose, FrontStance_MotorV, self._front_phase, FrontStance_Time)
-            back_leg_pose, back_motor_velocity = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR, reference_velocity, BackStance_LegPose, BackStance_MotorV, self._back_phase, BackStance_Time)
+            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, front_stance_time, front_stance_action, front_stance_action_dot, self._front_phase)
+            back_leg_pose,  back_motor_velocity  = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR,  back_stance_time,  back_stance_action,  back_stance_action_dot,  self._back_phase)
 
         leg_pose = [0] * _NUM_MOTORS
         motor_velocity = [0] * _NUM_MOTORS
-        j = 0
-        for i in FRONT_LEG_PAIR:
-            leg_pose[i] = front_leg_pose[j][0]
-            leg_pose[i + _NUM_LEGS] = front_leg_pose[j][1]
-            if j == 0:
-                motor_velocity[i * 2] = front_motor_velocity[0]
-                motor_velocity[i * 2 + 1] = front_motor_velocity[1]
-            else:
-                motor_velocity[i * 2] = front_motor_velocity[1]
-                motor_velocity[i * 2 + 1] = front_motor_velocity[0]
-            j += 1
 
-        j = 0
-        for i in BACK_LEG_PAIR:
-            leg_pose[i] = back_leg_pose[j][0]
-            leg_pose[i + _NUM_LEGS] = back_leg_pose[j][1]
-            if j == 0:
-                motor_velocity[i * 2] = back_motor_velocity[0]
-                motor_velocity[i * 2 + 1] = back_motor_velocity[1]
-            else:
-                motor_velocity[i * 2] = back_motor_velocity[1]
-                motor_velocity[i * 2 + 1] = back_motor_velocity[0]
-            j += 1
+        for i in FRONT_LEG_PAIR:    # 0, 2
+            leg_pose[i] = front_leg_pose[0]                         # front_swing
+            leg_pose[i + _NUM_LEGS] = front_leg_pose[1]             # front_exten
+            if i == 0:              # front_left_leg
+                motor_velocity[i * 2] = front_motor_velocity[0]     # motor 7
+                motor_velocity[i * 2 + 1] = front_motor_velocity[1] # motor 8
+            else:                   # front_right_leg
+                motor_velocity[i * 2] = front_motor_velocity[1]     # motor 8
+                motor_velocity[i * 2 + 1] = front_motor_velocity[0] # motor 7
 
-        #print('front desire swing = ', leg_pose[0])
-        #print('front desire exten = ', leg_pose[4])
-        #print('back desire swing = ', leg_pose[1])
-        #print('back desire exten = ', leg_pose[5])
+        for i in BACK_LEG_PAIR:     # 1, 3
+            leg_pose[i] = back_leg_pose[0]                          # back_swing
+            leg_pose[i + _NUM_LEGS] = back_leg_pose[1]              # back_exten
+            if i == 1:              # back_left_leg
+                motor_velocity[i * 2] = back_motor_velocity[0]      # motor 11
+                motor_velocity[i * 2 + 1] = back_motor_velocity[1]  # motor 12
+            else:                   # back_right_leg
+                motor_velocity[i * 2] = back_motor_velocity[1]      # motor 12
+                motor_velocity[i * 2 + 1] = back_motor_velocity[0]  # motor 11
+
+        # leg pose index: 0             1               2               3               4               5               6               7
+        # leg pose value: front_swing   back_swing      front_swing     back_swing      front_exten     back_exten      front_exten     back_swing
+
+        # mot velo index: 0             1               2               3               4               5               6               7
+        # mot velo value: motor 7       motor 8         motor 11        motor 12        motor 8         motor 7         motor 12        motor 11
         return leg_pose_to_motor_angles(leg_pose), motor_velocity
+
+    def clamp(self, current_velocity, reference_velocity):
+        current_velocity = min(max(current_velocity, reference_velocity[0]), reference_velocity[-1])
+        lower_velocity = math.floor(current_velocity * 10) / 10
+        upper_velocity = math.ceil(current_velocity * 10) / 10
+        lower_percentage = 1 - (current_velocity - lower_velocity) / 0.1
+        lower_index = reference_velocity.index(lower_velocity)
+        upper_index = reference_velocity.index(upper_velocity)
+        return lower_velocity, upper_velocity, lower_percentage, lower_index, upper_index
+
+    def interp2D(self, current_velocity, reference_velocity, data_2D):
+        lower_velocity, upper_velocity, lower_percentage, lower_index, upper_index = self.clamp(current_velocity, reference_velocity)
+        data_1D = lower_percentage * data_2D[lower_index] + (1 - lower_percentage) * data_2D[upper_index]
+        return data_1D
+
+    def interp3D(self, current_velocity, reference_velocity, data_3D):
+        lower_velocity, upper_velocity, lower_percentage, lower_index, upper_index = self.clamp(current_velocity, reference_velocity)
+        data_2D = lower_percentage * data_3D[lower_index] + (1 - lower_percentage) * data_3D[upper_index]
+        return data_2D
 
 
     @property

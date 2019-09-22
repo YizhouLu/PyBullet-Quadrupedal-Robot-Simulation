@@ -29,7 +29,7 @@ for _ in range(1):
         NUM_MOTORS = 8
     # MINITAUR
     for _ in range(1):
-        mat1 = sio.loadmat('vel_07_InitialCondition_to_VS_0006.mat')
+        mat1 = sio.loadmat('vel_03_InitialCondition_to_VS_0006.mat')
         sorted(mat1.keys())
         IP_Torso_Position = mat1['init_pos']
         IP_Torso_Rotation = mat1['init_rot']
@@ -40,8 +40,7 @@ for _ in range(1):
 
         INIT_POSITION = [IP_Torso_Position[0], IP_Torso_Position[1], IP_Torso_Position[2]]
         INIT_RACK_POSITION = [0, 0, 1]
-        #INIT_ORIENTATION = [IP_Torso_Rotation[0], IP_Torso_Rotation[1], IP_Torso_Rotation[2], IP_Torso_Rotation[3]]
-        INIT_ORIENTATION = [0, 0.0500, 0, 0.9988]
+        INIT_ORIENTATION = [IP_Torso_Rotation[0], IP_Torso_Rotation[1], IP_Torso_Rotation[2], IP_Torso_Rotation[3]]
         INIT_VELOCITY = [IP_Torso_Velocity[0], IP_Torso_Velocity[1], IP_Torso_Velocity[2]]
         INIT_ANGULAR_VELOCITY = [IP_Torso_AngularV[0],IP_Torso_AngularV[1],IP_Torso_AngularV[2]]
         #INIT_ANGULAR_VELOCITY = [0, 0, 0]
@@ -79,6 +78,7 @@ for _ in range(1):
         NUM_SIMULATION_ITERATION_STEPS = 300
     # MAIN
     for _ in range(1):
+        """
         mat2 = sio.loadmat('vel_07_States_to_VS_0006.mat')
         sorted(mat2.keys())
         base_velocity_x_desire = mat2['base_velocity_x']
@@ -89,13 +89,13 @@ for _ in range(1):
         sorted(mat1.keys())
         Inputs_Joint_Position = mat3['int_joint_position']
         Inputs_Joint_Velocity = mat3['int_joint_velocity']
-
-        mat4 = sio.loadmat('vel_07_Inputs_to_VS_0006_FrontStance')
+        """
+        mat4 = sio.loadmat('vel_03_Inputs_to_VS_0006_FrontStance')
         sorted(mat4.keys())
         Inputs_Joint_Position_Front_Stance = mat4['int_front_leg_pose']
         Inputs_Joint_Velocity_Front_Stance = mat4['int_front_leg_velocity']
 
-        mat5 = sio.loadmat('vel_07_Inputs_to_VS_0006_BackStance')
+        mat5 = sio.loadmat('vel_03_Inputs_to_VS_0006_BackStance')
         sorted(mat5.keys())
         Inputs_Joint_Position_Back_Stance = mat5['int_back_leg_pose']
         Inputs_Joint_Velocity_Back_Stance = mat5['int_back_leg_velocity']
@@ -103,8 +103,8 @@ for _ in range(1):
         flags = tf.app.flags
         FLAGS = tf.app.flags.FLAGS
 
-        flags.DEFINE_float("motor_kp", 6.0, "The position gain of the motor.")
-        flags.DEFINE_float("motor_kd", 0.5, "The speed gain of the motor.")
+        flags.DEFINE_float("motor_kp", 7.0, "The position gain of the motor.")
+        flags.DEFINE_float("motor_kd", 0.8, "The speed gain of the motor.")
         flags.DEFINE_float("control_latency", 0.02, "The latency between sensor measurement and action"
                            " execution the robot.")
         flags.DEFINE_string("log_path", None, "The directory to write the log file.")
@@ -144,10 +144,10 @@ def convert_to_list(obj):
         return obj
     except TypeError:
         return [obj]
-
+"""
 def velocity(iter):
     return base_velocity_x_desire[iter]
-
+"""
 class MotorModel(object):
   """The accurate motor model, which is based on the physics of DC motors.
 
@@ -1740,12 +1740,10 @@ def main(argv):
 
         controller = minitaur_bounding_controller.MinitaurRaibertBoundingController(env.minitaur)
 
-        num_iter = range(1000)
+        num_iter = range(2000)
         tstart = env.minitaur.GetTimeSinceReset()
         for i in num_iter:
-            # print('iteration number = ', i)
             t = env.minitaur.GetTimeSinceReset() - tstart
-            # print('time = ', t)
             phase, event = controller.update(t)
 
             action, action_dot = controller.get_action(Inputs_Joint_Position_Front_Stance, Inputs_Joint_Position_Back_Stance, Inputs_Joint_Velocity_Front_Stance, Inputs_Joint_Velocity_Back_Stance)
@@ -1758,9 +1756,11 @@ def main(argv):
             # print('back actual exten = ',(q_true[3]+q_true[2])/2)
             # print('front desire swing = ', (action[1]-action[0])/2)
             # print('front desire exten = ', (action[1]+action[0])/2)
-            # print('back desire swing = ', (action[3]-action[2])/2)
-            # print('back desire exten = ', (action[3]+action[2])/2)
-            # input('-------------Pause-------------')
+            #print('back desire swing = ', (action[3]-action[2])/2)
+            #print('back desire exten = ', (action[3]+action[2])/2)
+            #print('front motor 11 velocity = ', action_dot[2])
+            #print('front motor 12 velocity = ', action_dot[3])
+            #input('-------------Pause-------------')
 
 
 
@@ -1781,16 +1781,20 @@ def main(argv):
         plt.subplot(2,1,1)
         plt.plot(num_iter, front_left_leg_swing_actual, num_iter, front_left_leg_swing_desire)
         plt.ylabel('Swing')
+        plt.title('Front Leg')
         plt.subplot(2,1,2)
         plt.plot(num_iter, front_left_leg_exten_actual, num_iter, front_left_leg_exten_desire)
         plt.ylabel('Extension')
+
         plt.figure(2)
         plt.subplot(2,1,1)
         plt.plot(num_iter, back_left_leg_swing_actual, num_iter, back_left_leg_swing_desire)
         plt.ylabel('Swing')
+        plt.title('Back Leg')
         plt.subplot(2,1,2)
         plt.plot(num_iter, back_left_leg_exten_actual, num_iter, back_left_leg_exten_desire)
         plt.ylabel('Extension')
+
         plt.figure(3)
         plt.subplot(2,1,1)
         plt.plot(num_iter, base_angle_pitch_actual)
