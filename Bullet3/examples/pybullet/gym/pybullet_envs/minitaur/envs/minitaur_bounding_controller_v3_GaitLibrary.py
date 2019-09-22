@@ -132,7 +132,7 @@ class RaibertSwingLegController(object):
             target_leg_exten = raibert_controller.nominal_leg_extension
 
         target_leg_pose = (target_leg_swing, target_leg_exten)
-        print('swing set = ', swing_set[0], 'normalized_phase = ', normalized_phase)
+        #print('swing set = ', swing_set[0], 'normalized_phase = ', normalized_phase)
         desired_leg_pose = self._leg_trajectory_generator(normalized_phase, swing_start_leg_pose, target_leg_pose)
 
         desired_motor_velocity = [-100, -100] # turn off D controller
@@ -193,6 +193,10 @@ class MinitaurRaibertBoundingController(object):
         self._front_phase = -1
         self._back_phase = -1
 
+        self._front_impact_time = 0
+        self._last_front_impact_time = 0
+        self._last_front_impact_position = [0,0,0]
+
     def update(self, t):
         self._time = t
         front_left = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 19)
@@ -201,11 +205,11 @@ class MinitaurRaibertBoundingController(object):
         back_right = self._robot._pybullet_client.getClosestPoints(0, 1, 0.005, -1, 9)
         if (front_left and front_right) and not (back_left and back_right):
             if self._front == 0 and self._back == 0:
-                print('Front Just Impacted')
+                #print('Front Just Impacted')
                 self._event_id = 1
                 self._front_phase = -1
             elif self._front == 1 and self._back == 1:
-                print('Back Just Lifted')
+                #print('Back Just Lifted')
                 self._event_id = 4
                 self._back_phase = -1
             self._front = 1
@@ -213,11 +217,11 @@ class MinitaurRaibertBoundingController(object):
             phase_id = 1
         elif (back_left and back_right) and not (front_left and front_right):
             if self._front == 0 and self._back == 0:
-                print('Back Just Impacted')
+                #print('Back Just Impacted')
                 self._event_id = 3
                 self._back_phase = -1
             elif self._front == 1 and self._back == 1:
-                print('Front Just Lifted')
+                #print('Front Just Lifted')
                 self._event_id = 2
                 self._front_phase = -1
             self._front = 0
@@ -225,11 +229,11 @@ class MinitaurRaibertBoundingController(object):
             phase_id = 2
         elif not (back_left and back_right) and not (front_left and front_right):
             if self._front == 1 and self._back == 0:
-                print('Front Just Lifted')
+                #print('Front Just Lifted')
                 self._event_id = 2
                 self._front_phase = -1
             elif self._front == 0 and self._back == 1:
-                print('Back Just Lifted')
+                #print('Back Just Lifted')
                 self._event_id = 4
                 self._back_phase = -1
             self._front = 0
@@ -237,11 +241,11 @@ class MinitaurRaibertBoundingController(object):
             phase_id = 3
         elif (front_left and front_right) and (back_left and back_right):
             if self._front == 1 and self._back == 0:
-                print('Back Just Impacted')
+                #print('Back Just Impacted')
                 self._event_id = 3
                 self._back_phase = -1
             elif self._front == 0 and self._back == 1:
-                print('Front Just Impact')
+                #print('Front Just Impact')
                 self._event_id = 1
                 self._front_phase = -1
             self._front = 1
@@ -252,6 +256,8 @@ class MinitaurRaibertBoundingController(object):
             # front impact
             if self._event_id == 1:
                 self._stance_start_front_leg_pose = self._get_average_leg_pose(FRONT_LEG_PAIR)
+                self._front_impact_time = t
+                self._front_impact_position = self._robot.GetBasePosition()
             # front lift
             elif self._event_id == 2:
                 self._swing_start_front_leg_pose = self._get_average_leg_pose(FRONT_LEG_PAIR)
@@ -272,7 +278,17 @@ class MinitaurRaibertBoundingController(object):
         return angle[1]
 
     def get_speed(self):
-        return 0.42
+        speed = 0.6
+
+        if self._front_impact_time is not self._last_front_impact_time:
+            stride_time = self._front_impact_time - self._last_front_impact_time
+            stride_length = math.sqrt((self._front_impact_position[0]-self._last_front_impact_position[0])**2+(self._front_impact_position[1]-self._last_front_impact_position[1])**2)
+            speed = stride_length/stride_time
+            print(speed)
+            self._last_front_impact_time = self._front_impact_time
+            self._last_front_impact_position = self._front_impact_position
+
+        return speed/2
 
     def _get_average_leg_pose(self, leg_indices):
         """Get the average leg pose."""

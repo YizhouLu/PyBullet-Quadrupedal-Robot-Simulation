@@ -1747,7 +1747,7 @@ def main(argv):
 
         controller = minitaur_bounding_controller.MinitaurRaibertBoundingController(env.minitaur)
 
-        num_iter = range(2000)
+        num_iter = range(5000)
         tstart = env.minitaur.GetTimeSinceReset()
         for i in num_iter:
             t = env.minitaur.GetTimeSinceReset() - tstart
@@ -1772,8 +1772,8 @@ def main(argv):
             # print('front desire exten = ', (action[1]+action[0])/2)
             # print('back desire swing = ', (action[3]-action[2])/2)
             # print('back desire exten = ', (action[3]+action[2])/2)
-            # input('-------------Pause-------------')
-
+            #input('-------------Pause-------------')
+            """
             front_left_leg_swing_actual.append((q_true[1]-q_true[0])/2)
             front_left_leg_exten_actual.append((q_true[1]+q_true[0])/2)
             back_left_leg_swing_actual.append((q_true[3]-q_true[2])/2)
@@ -1786,7 +1786,8 @@ def main(argv):
 
             base_angle_pitch_actual.append(q_true[29])
             base_velocity_x_actual.append(q_true[31])
-
+            """
+        """
         plt.figure(1)
         plt.subplot(2,1,1)
         plt.plot(num_iter, front_left_leg_swing_actual, num_iter, front_left_leg_swing_desire)
@@ -1809,9 +1810,12 @@ def main(argv):
         plt.plot(num_iter, base_velocity_x_actual)
         plt.ylabel('X Velocity')
         plt.draw()
+        """
     finally:
         env.close()
+        """
         plt.show()
+        """
 
 if __name__ == "__main__":
     tf.compat.v1.app.run(main)
