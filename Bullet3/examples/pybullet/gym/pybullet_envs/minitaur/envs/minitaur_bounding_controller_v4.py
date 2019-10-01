@@ -107,7 +107,7 @@ def generate_swing_trajectory(phase, init_pose, end_pose):
     return (sw, ext)
 
 def generate_stance_trajectory(phase, init_pose, end_pose):
-    normalized_phase = phase
+    normalized_phase = min(phase * 2, 1)
 
     sw = (end_pose[0] - init_pose[0]) * normalized_phase + init_pose[0]
     ext = (end_pose[1] - init_pose[1]) * normalized_phase + init_pose[1]
@@ -120,19 +120,23 @@ class RaibertSwingLegController(object):
         self._speed_gain = speed_gain
         self._leg_trajectory_generator = leg_trajectory_generator
 
-    def get_action(self, raibert_controller, swing_set, swing_start_leg_pose, normalized_phase):
+    def get_action(self, raibert_controller, swing_set, swing_start_leg_pose, normalized_phase, speed):
         current_speed = raibert_controller.estimate_base_velocity()
         current_angle = raibert_controller.estimate_base_angle()
 
-        if swing_set[0] == 0:   # if front leg in swing
-            target_leg_swing = -1 * current_angle
-            target_leg_exten = raibert_controller.nominal_leg_extension
-        else:                   # if back leg in swing
-            target_leg_swing = -1 * current_angle - 0.05
-            target_leg_exten = raibert_controller.nominal_leg_extension
+        if swing_set[0] == 0:
+            # if front leg in swing
+            if speed > 0.4 and speed < 0.5:
+                target_leg_swing_abs = speed - 0.4
+            else:
+                target_leg_swing_abs = 0
+        else:
+            # if back leg in swing
+            target_leg_swing_abs = 1.0270 * speed - 0.0851
+            target_leg_swing_abs = min(target_leg_swing_abs, 0.4)
 
-        target_leg_pose = (target_leg_swing, target_leg_exten)
-        #print('swing set = ', swing_set[0], 'normalized_phase = ', normalized_phase)
+        target_leg_pose = (-1 * current_angle + (-1 *target_leg_swing_abs), raibert_controller.nominal_leg_extension)
+
         desired_leg_pose = self._leg_trajectory_generator(normalized_phase, swing_start_leg_pose, target_leg_pose)
 
         desired_motor_velocity = [-100, -100] # turn off D controller
@@ -146,26 +150,40 @@ class RaibertStanceLegController(object):
         self._angle_gain = angle_gain
         self._leg_trajectory_generator = leg_trajectory_generator
 
-    def get_action(self, raibert_controller, stance_set, stance_time, stance_action, stance_action_dot, phase):
+    def get_action(self, raibert_controller, stance_set, stance_start_leg_pose, stance_time, stance_action, stance_action_dot, phase, speed):
         # decompose and reshape the desire pose (time, swing, exten, motor velocities)
-        tspan = np.reshape(stance_time,          len(stance_time[0]))           # 21 nodes
-        swing = np.reshape(stance_action[0],     len(stance_action[0]))         # 21 nodes
-        exten = np.reshape(stance_action[2],     len(stance_action[2]))         # 21 nodes
-        motv1 = np.reshape(stance_action_dot[0], len(stance_action_dot[0]))     # 21 nodes
-        motv2 = np.reshape(stance_action_dot[1], len(stance_action_dot[1]))     # 21 nodes
+        current_angle = raibert_controller.estimate_base_angle()
 
-        if phase * 0.006 < tspan[-1]: # read stance leg pose data and motor velocity data regardless of which stance leg is action
+        tspan = np.reshape(stance_time,              len(stance_time[0]))           # 21 nodes
+        swing_rel = np.reshape(stance_action[0],     len(stance_action[0]))         # 21 nodes
+        swing_abs = np.reshape(stance_action[1],     len(stance_action[1]))         # 21 nodes
+        extension = np.reshape(stance_action[2],     len(stance_action[2]))         # 21 nodes
+        motorvel1 = np.reshape(stance_action_dot[0], len(stance_action_dot[0]))     # 21 nodes
+        motorvel2 = np.reshape(stance_action_dot[1], len(stance_action_dot[1]))     # 21 nodes
+
+        if phase * 0.006 < tspan[-1]:
+            # read stance leg pose data and motor velocity data regardless of which stance leg is action
             # instead of reading the data directly, need to interpolate the data based on time step in simulation
-            desired_leg_swing = np.interp(phase * 0.006, tspan, swing)
-            desired_leg_exten = np.interp(phase * 0.006, tspan, exten)
-            desired_leg_pose = (desired_leg_swing, desired_leg_exten)
-            desired_leg_motv1 = np.interp(phase * 0.006, tspan, motv1)
-            desired_leg_motv2 = np.interp(phase * 0.006, tspan, motv2)
-            desired_motor_velocity = (desired_leg_motv1, desired_leg_motv2)
-        else: # runs out of data
-            desired_leg_pose = (swing[-1], exten[-1])
-            desired_motor_velocity = [-100, -100]
+            if stance_set[0] == 0:
+                # if front leg in stance
+                desired_leg_swing_abs = 1.0270 * speed - 0.0851
+                desired_leg_swing_abs = min(desired_leg_swing_abs, 0.4)
+            else:
+                # if back leg in stance
+                if speed > 0.4 and speed < 0.5:
+                    desired_leg_swing_abs = speed - 0.4
+                else:
+                    desired_leg_swing_abs = 0
 
+            desired_leg_pose = (-1 * current_angle + desired_leg_swing_abs, np.interp(phase * 0.006, tspan, extension))
+
+            desired_leg_motorvel1 = np.interp(phase * 0.006, tspan, motorvel1)
+            desired_leg_motorvel2 = np.interp(phase * 0.006, tspan, motorvel2)
+            desired_motor_velocity = [desired_leg_motorvel1, desired_leg_motorvel2]
+        else:
+            # runs out of data
+            desired_leg_pose = (-1 * current_angle, extension[-1])
+            desired_motor_velocity = [-100, -100]
         return desired_leg_pose, desired_motor_velocity
 
 class MinitaurRaibertBoundingController(object):
@@ -193,9 +211,9 @@ class MinitaurRaibertBoundingController(object):
         self._front_phase = -1
         self._back_phase = -1
 
-        self._front_impact_time = 0
-        self._last_front_impact_time = 0
-        self._last_front_impact_position = [0,0,0]
+        self._front_impact_time = None
+        self._last_front_impact_time = None
+        self._actual_speed = None
 
     def update(self, t):
         self._time = t
@@ -277,18 +295,44 @@ class MinitaurRaibertBoundingController(object):
         angle = self._robot.GetTrueBaseRollPitchYaw()
         return angle[1]
 
-    def get_speed(self):
-        speed = 0.6
+    def get_speed(self, t):
+        if t < 800:
+            desired_speed = 0.3;
+        elif t < 1500:
+            desired_speed = 0.4;
+        elif t < 2000:
+            desired_speed = 0.5;
+        elif t < 2500:
+            desired_speed = 0.4;
+        else:
+            desired_speed = 0.3;
 
-        if self._front_impact_time is not self._last_front_impact_time:
-            stride_time = self._front_impact_time - self._last_front_impact_time
-            stride_length = math.sqrt((self._front_impact_position[0]-self._last_front_impact_position[0])**2+(self._front_impact_position[1]-self._last_front_impact_position[1])**2)
-            speed = stride_length/stride_time
-            print(speed)
-            self._last_front_impact_time = self._front_impact_time
-            self._last_front_impact_position = self._front_impact_position
-
-        return speed
+        if self._front_impact_time is None:
+            # Minitaur has not touched down yet since simulation starts
+            return desired_speed, 0
+        else:
+            if self._last_front_impact_time is None:
+                # Minitaur touches down for the first time since simulation starts
+                self._last_front_impact_time = self._front_impact_time
+                self._last_front_impact_position = self._front_impact_position
+                return desired_speed, 0
+            else:
+                if self._front_impact_time is self._last_front_impact_time:
+                    if self._actual_speed is None:
+                        # Minitaur is completing the first stride
+                        return desired_speed, 0
+                    else:
+                        # Minitaur is completing one stride
+                        return desired_speed, self._actual_speed
+                else:
+                    # Minitaur completes one stride
+                    stride_time = self._front_impact_time - self._last_front_impact_time
+                    stride_length = math.sqrt((self._front_impact_position[0]-self._last_front_impact_position[0])**2+(self._front_impact_position[1]-self._last_front_impact_position[1])**2)
+                    self._actual_speed = stride_length/stride_time
+                    self._last_front_impact_time = self._front_impact_time
+                    self._last_front_impact_position = self._front_impact_position
+                    print(self._actual_speed)
+                    return desired_speed, self._actual_speed
 
     def _get_average_leg_pose(self, leg_indices):
         """Get the average leg pose."""
@@ -320,26 +364,25 @@ class MinitaurRaibertBoundingController(object):
 
         return front_stance_time, front_stance_action, front_stance_action_dot, back_stance_time, back_stance_action, back_stance_action_dot
 
-    def get_action(self, front_stance_time, front_stance_action, front_stance_action_dot, back_stance_time,  back_stance_action,  back_stance_action_dot):
+    def get_action(self, front_stance_time, front_stance_action, front_stance_action_dot, back_stance_time,  back_stance_action,  back_stance_action_dot, speed):
         self._front_phase += 1
         self._back_phase  += 1
-
         # Front Stance
         if self._phase_id == 1:
-            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, front_stance_time, front_stance_action, front_stance_action_dot, self._front_phase)
-            back_leg_pose,  back_motor_velocity  = self._swing_leg_controller. get_action(self, BACK_LEG_PAIR,  self._swing_start_back_leg_pose,  self._back_phase  / 68)
+            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, self._stance_start_front_leg_pose, front_stance_time, front_stance_action, front_stance_action_dot, self._front_phase, speed)
+            back_leg_pose,  back_motor_velocity  = self._swing_leg_controller. get_action(self, BACK_LEG_PAIR,  self._swing_start_back_leg_pose,   self._back_phase  / 68, speed)
         # Back Stance
         elif self._phase_id == 2:
-            front_leg_pose, front_motor_velocity = self._swing_leg_controller. get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
-            back_leg_pose,  back_motor_velocity  = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR,  back_stance_time,  back_stance_action,  back_stance_action_dot,  self._back_phase)
+            front_leg_pose, front_motor_velocity = self._swing_leg_controller. get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose,  self._front_phase / 66, speed)
+            back_leg_pose,  back_motor_velocity  = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR,  self._stance_start_back_leg_pose,  back_stance_time,  back_stance_action,  back_stance_action_dot,  self._back_phase, speed)
         # Flight
         elif self._phase_id == 3:
-            front_leg_pose, front_motor_velocity = self._swing_leg_controller. get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose, self._front_phase / 66)
-            back_leg_pose,  back_motor_velocity  = self._swing_leg_controller. get_action(self, BACK_LEG_PAIR,  self._swing_start_back_leg_pose,  self._back_phase  / 68)
+            front_leg_pose, front_motor_velocity = self._swing_leg_controller. get_action(self, FRONT_LEG_PAIR, self._swing_start_front_leg_pose,  self._front_phase / 66, speed)
+            back_leg_pose,  back_motor_velocity  = self._swing_leg_controller. get_action(self, BACK_LEG_PAIR,  self._swing_start_back_leg_pose,   self._back_phase  / 68, speed)
         # Stance
         elif self._phase_id == 4:
-            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, front_stance_time, front_stance_action, front_stance_action_dot, self._front_phase)
-            back_leg_pose,  back_motor_velocity  = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR,  back_stance_time,  back_stance_action,  back_stance_action_dot,  self._back_phase)
+            front_leg_pose, front_motor_velocity = self._stance_leg_controller.get_action(self, FRONT_LEG_PAIR, self._stance_start_front_leg_pose, front_stance_time, front_stance_action, front_stance_action_dot, self._front_phase, speed)
+            back_leg_pose,  back_motor_velocity  = self._stance_leg_controller.get_action(self, BACK_LEG_PAIR,  self._stance_start_back_leg_pose,  back_stance_time,  back_stance_action,  back_stance_action_dot,  self._back_phase, speed)
 
         leg_pose = [0] * _NUM_MOTORS
         motor_velocity = [0] * _NUM_MOTORS
